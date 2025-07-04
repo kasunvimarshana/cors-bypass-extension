@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>CORS Settings</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>Settings</h1>
+      <label><input type="checkbox" id="globalToggle" /> Enable</label>
+      <label
+        >Allow Origin:
+        <select id="originMode">
+          <option value="*">*</option>
+          <option value="request_origin">Mirror Request Origin</option>
+          <option value="custom">Custom</option>
+        </select>
+      </label>
+      <input id="customOrigin" placeholder="https://example.com" />
+      <label>Methods: <input id="methods" /></label>
+      <label>Headers: <input id="headers" /></label>
+      <label
+        ><input type="checkbox" id="credentials" /> Allow Credentials</label
+      >
+      <label
+        ><input type="checkbox" id="removeExisting" /> Remove Existing
+        Headers</label
+      >
+      <label
+        >Domains:
+        <textarea id="domainList" rows="5"></textarea>
+      </label>
+      <button id="saveButton">Save</button>
+      <button id="resetButton">Reset</button>
+    </div>
+    <script src="options.js"></script>
+  </body>
+</html>
