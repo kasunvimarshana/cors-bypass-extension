@@ -1,39 +1,199 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="UTF-8" />
-    <title>CORS Settings</title>
-    <link rel="stylesheet" href="styles.css" />
-  </head>
-  <body>
-    <div class="container">
-      <h1>Settings</h1>
-      <label><input type="checkbox" id="globalToggle" /> Enable</label>
-      <label
-        >Allow Origin:
-        <select id="originMode">
-          <option value="*">*</option>
-          <option value="request_origin">Mirror Request Origin</option>
-          <option value="custom">Custom</option>
-        </select>
-      </label>
-      <input id="customOrigin" placeholder="https://example.com" />
-      <label>Methods: <input id="methods" /></label>
-      <label>Headers: <input id="headers" /></label>
-      <label
-        ><input type="checkbox" id="credentials" /> Allow Credentials</label
-      >
-      <label
-        ><input type="checkbox" id="removeExisting" /> Remove Existing
-        Headers</label
-      >
-      <label
-        >Domains:
-        <textarea id="domainList" rows="5"></textarea>
-      </label>
-      <button id="saveButton">Save</button>
-      <button id="resetButton">Reset</button>
-    </div>
-    <script src="options.js"></script>
-  </body>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CORS Bypass - Advanced Settings</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="options-page">
+  <div class="options-container">
+    <header class="options-header">
+      <div class="header-content">
+        <div class="logo">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+            <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+            <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div>
+          <h1>CORS Bypass Pro</h1>
+          <p>Advanced Configuration Settings</p>
+        </div>
+      </div>
+    </header>
+
+    <main class="options-main">
+      <div class="settings-grid">
+        <!-- General Settings -->
+        <section class="settings-section">
+          <h2>General Settings</h2>
+          <div class="setting-group">
+            <label class="setting-item">
+              <div class="setting-info">
+                <span class="setting-label">Enable Extension</span>
+                <span class="setting-description">Master switch for CORS bypass functionality</span>
+              </div>
+              <div class="toggle-container">
+                <label class="switch">
+                  <input type="checkbox" id="globalToggle">
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </label>
+
+            <label class="setting-item">
+              <div class="setting-info">
+                <span class="setting-label">Debug Mode</span>
+                <span class="setting-description">Enable console logging for troubleshooting</span>
+              </div>
+              <div class="toggle-container">
+                <label class="switch">
+                  <input type="checkbox" id="debugMode">
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </label>
+          </div>
+        </section>
+
+        <!-- Origin Settings -->
+        <section class="settings-section">
+          <h2>Origin Configuration</h2>
+          <div class="setting-group">
+            <div class="setting-item">
+              <div class="setting-info">
+                <span class="setting-label">Origin Handling</span>
+                <span class="setting-description">How to handle Access-Control-Allow-Origin header</span>
+              </div>
+              <div class="radio-group">
+                <label class="radio-item">
+                  <input type="radio" name="origin" value="request_origin">
+                  <span class="radio-label">Mirror Request Origin</span>
+                  <span class="radio-description">Use the origin from the request</span>
+                </label>
+                <label class="radio-item">
+                  <input type="radio" name="origin" value="*">
+                  <span class="radio-label">Allow Any Origin (*)</span>
+                  <span class="radio-description">Allow all origins (less secure)</span>
+                </label>
+                <label class="radio-item">
+                  <input type="radio" name="origin" value="custom">
+                  <span class="radio-label">Custom Origin</span>
+                  <span class="radio-description">Specify a custom origin</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="setting-item" id="customOriginSetting">
+              <div class="setting-info">
+                <span class="setting-label">Custom Origin URL</span>
+                <span class="setting-description">Enter the specific origin to allow</span>
+              </div>
+              <input type="text" id="customOrigin" placeholder="https://example.com" class="text-input">
+            </div>
+          </div>
+        </section>
+
+        <!-- HTTP Settings -->
+        <section class="settings-section">
+          <h2>HTTP Configuration</h2>
+          <div class="setting-group">
+            <div class="setting-item">
+              <div class="setting-info">
+                <span class="setting-label">Allowed Methods</span>
+                <span class="setting-description">HTTP methods to allow in CORS requests</span>
+              </div>
+              <input type="text" id="allowedMethods" class="text-input" placeholder="GET, POST, PUT, DELETE">
+            </div>
+
+            <div class="setting-item">
+              <div class="setting-info">
+                <span class="setting-label">Allowed Headers</span>
+                <span class="setting-description">Headers to allow in CORS requests</span>
+              </div>
+              <input type="text" id="allowedHeaders" class="text-input" placeholder="Content-Type, Authorization">
+            </div>
+
+            <label class="setting-item">
+              <div class="setting-info">
+                <span class="setting-label">Allow Credentials</span>
+                <span class="setting-description">Include credentials in CORS requests</span>
+              </div>
+              <div class="toggle-container">
+                <label class="switch">
+                  <input type="checkbox" id="allowCredentials">
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </label>
+
+            <label class="setting-item">
+              <div class="setting-info">
+                <span class="setting-label">Remove Existing Headers</span>
+                <span class="setting-description">Remove existing CORS headers before adding new ones</span>
+              </div>
+              <div class="toggle-container">
+                <label class="switch">
+                  <input type="checkbox" id="removeExisting">
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </label>
+          </div>
+        </section>
+
+        <!-- Domain Whitelist -->
+        <section class="settings-section">
+          <h2>Domain Whitelist</h2>
+          <div class="setting-group">
+            <div class="setting-item">
+              <div class="setting-info">
+                <span class="setting-label">Allowed Domains</span>
+                <span class="setting-description">Domains where CORS bypass should be applied (one per line)</span>
+              </div>
+              <textarea id="domainList" rows="6" class="textarea-input" placeholder="*&#10;*.example.com&#10;api.mysite.com"></textarea>
+              <div class="setting-hint">
+                <strong>Examples:</strong><br>
+                • <code>*</code> - All domains<br>
+                • <code>*.example.com</code> - All subdomains of example.com<br>
+                • <code>api.mysite.com</code> - Specific domain only
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="actions-section">
+        <button id="saveButton" class="btn btn-primary">Save All Settings</button>
+        <button id="resetButton" class="btn btn-secondary">Reset to Defaults</button>
+        <button id="exportButton" class="btn btn-outline">Export Settings</button>
+        <button id="importButton" class="btn btn-outline">Import Settings</button>
+      </div>
+
+      <!-- Status Messages -->
+      <div id="statusMessage" class="status-message" style="display: none;"></div>
+    </main>
+
+    <!-- Security Warning -->
+    <footer class="options-footer">
+      <div class="warning-box">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M10.29 3.86L1.82 18A2 2 0 0 0 3.24 21H20.76A2 2 0 0 0 22.18 18L13.71 3.86A2 2 0 0 0 10.29 3.86Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+          <line x1="12" y1="9" x2="12" y2="13" stroke="currentColor" stroke-width="2"/>
+          <line x1="12" y1="17" x2="12.01" y2="17" stroke="currentColor" stroke-width="2"/>
+        </svg>
+        <div>
+          <strong>Security Warning:</strong> This extension bypasses CORS restrictions, which are important security features. 
+          Use only for development purposes and disable in production environments.
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <input type="file" id="importFile" accept=".json" style="display: none;">
+  <script src="options.js"></script>
+</body>
 </html>
