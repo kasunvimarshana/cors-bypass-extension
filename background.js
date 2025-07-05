@@ -1,4 +1,3 @@
-// CORS Bypass Extension Background Script
 const DEFAULT_SETTINGS = {
   enabled: true,
   allowOrigin: 'request_origin',
@@ -8,78 +7,43 @@ const DEFAULT_SETTINGS = {
   allowCredentials: true,
   domains: ['*'],
   removeExisting: true,
-  debugMode: false,
+  logRequests: false,
 };
 
-let currentSettings = { ...DEFAULT_SETTINGS };
-let corsEnabled = true;
+let settings = { ...DEFAULT_SETTINGS };
 
 // Initialize extension
 chrome.runtime.onInstalled.addListener(async () => {
-  await loadSettings();
-  await updateIcon();
-  await setupCorsRules();
+  // Load settings
+  const data = await chrome.storage.sync.get('corsSettings');
+  if (!data?.corsSettings) {
+    await chrome.storage.sync.set({ corsSettings: DEFAULT_SETTINGS });
+  }
 
-  console.log('CORS Bypass Extension installed and initialized');
+  // Update dynamic rules
+  await updateDynamicRules();
 });
 
-// Load settings from storage
-async function loadSettings() {
-  try {
-    const result = await chrome.storage.sync.get('corsSettings');
-    currentSettings = { ...DEFAULT_SETTINGS, ...result.corsSettings };
-    corsEnabled = currentSettings.enabled;
-  } catch (error) {
-    console.error('Error loading settings:', error);
-    currentSettings = { ...DEFAULT_SETTINGS };
+// Load saved settings on startup
+chrome.storage.sync.get('corsSettings', (data) => {
+  if (data?.corsSettings) {
+    settings = { ...DEFAULT_SETTINGS, ...data.corsSettings };
   }
-}
+});
 
 // Listen for settings changes
 chrome.storage.onChanged.addListener(async (changes, namespace) => {
   if (namespace === 'sync' && changes.corsSettings) {
-    currentSettings = { ...DEFAULT_SETTINGS, ...changes.corsSettings.newValue };
-    corsEnabled = currentSettings.enabled;
-    await updateIcon();
-    await setupCorsRules();
-
-    if (currentSettings.debugMode) {
-      console.log('Settings updated:', currentSettings);
-    }
+    settings = { ...DEFAULT_SETTINGS, ...changes.corsSettings.newValue };
+    console.log('CORS Bypass settings updated:', settings);
+    await updateDynamicRules();
   }
 });
 
-// Update extension icon and badge
-async function updateIcon() {
+// Update dynamic rules based on settings
+async function updateDynamicRules() {
   try {
-    const iconPath = corsEnabled
-      ? {
-          16: 'icons/icon16.png',
-          32: 'icons/icon32.png',
-          48: 'icons/icon48.png',
-          128: 'icons/icon128.png',
-        }
-      : {
-          16: 'icons/icon16-disabled.png',
-          32: 'icons/icon32-disabled.png',
-          48: 'icons/icon48-disabled.png',
-          128: 'icons/icon128-disabled.png',
-        };
-
-    await chrome.action.setIcon({ path: iconPath });
-    await chrome.action.setBadgeText({ text: corsEnabled ? 'ON' : 'OFF' });
-    await chrome.action.setBadgeBackgroundColor({
-      color: corsEnabled ? '#10B981' : '#EF4444',
-    });
-  } catch (error) {
-    console.error('Error updating icon:', error);
-  }
-}
-
-// Setup CORS bypass rules using declarativeNetRequest
-async function setupCorsRules() {
-  try {
-    // Remove ALL existing dynamic rules first
+    // Remove existing dynamic rules
     const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
     const ruleIds = existingRules.map((rule) => rule.id);
 
@@ -87,295 +51,167 @@ async function setupCorsRules() {
       await chrome.declarativeNetRequest.updateDynamicRules({
         removeRuleIds: ruleIds,
       });
-
-      // Wait a bit to ensure rules are fully removed
-      await new Promise((resolve) => setTimeout(resolve, 100));
     }
 
-    if (!corsEnabled) return;
+    // Add new rules if enabled
+    if (settings.enabled) {
+      const rules = createDynamicRules();
+      if (rules.length > 0) {
+        await chrome.declarativeNetRequest.updateDynamicRules({
+          addRules: rules,
+        });
+      }
+    }
 
-    // Create new rules with unique IDs based on timestamp
-    const rules = [];
-    const baseId = Date.now() % 1000000; // Use timestamp to ensure uniqueness
-    let ruleId = baseId;
+    console.log('Dynamic rules updated successfully');
+  } catch (error) {
+    console.error('Error updating dynamic rules:', error);
+  }
+}
 
-    // Common CORS headers
-    const corsHeaders = [
-      {
-        header: 'Access-Control-Allow-Origin',
-        operation: 'set',
-        value: '*',
-      },
-      {
-        header: 'Access-Control-Allow-Methods',
-        operation: 'set',
-        value: currentSettings.allowMethods,
-      },
-      {
-        header: 'Access-Control-Allow-Headers',
-        operation: 'set',
-        value: currentSettings.allowHeaders,
-      },
-      {
-        header: 'Access-Control-Allow-Credentials',
-        operation: 'set',
-        value: currentSettings.allowCredentials ? 'true' : 'false',
-      },
-      {
-        header: 'Access-Control-Expose-Headers',
-        operation: 'set',
-        value: '*',
-      },
-      {
-        header: 'Access-Control-Max-Age',
-        operation: 'set',
-        value: '86400',
-      },
-    ];
+// Create dynamic rules based on settings
+function createDynamicRules() {
+  const rules = [];
 
-    // Rule 1: Handle ALL XMLHttpRequest and related requests
-    rules.push({
-      id: ruleId++,
-      priority: 1,
-      action: {
-        type: 'modifyHeaders',
-        responseHeaders: corsHeaders,
-      },
-      condition: {
-        urlFilter: '*',
-        resourceTypes: ['xmlhttprequest'],
-      },
+  // Base rule for CORS headers
+  const responseHeaders = [];
+
+  // Add origin header
+  const originValue = getOriginValue();
+  responseHeaders.push({
+    header: 'Access-Control-Allow-Origin',
+    operation: 'set',
+    value: originValue,
+  });
+
+  // Add methods header
+  responseHeaders.push({
+    header: 'Access-Control-Allow-Methods',
+    operation: 'set',
+    value: settings.allowMethods,
+  });
+
+  // Add headers header
+  responseHeaders.push({
+    header: 'Access-Control-Allow-Headers',
+    operation: 'set',
+    value: settings.allowHeaders,
+  });
+
+  // Add credentials header
+  responseHeaders.push({
+    header: 'Access-Control-Allow-Credentials',
+    operation: 'set',
+    value: settings.allowCredentials ? 'true' : 'false',
+  });
+
+  // Add max-age header
+  responseHeaders.push({
+    header: 'Access-Control-Max-Age',
+    operation: 'set',
+    value: '86400',
+  });
+
+  // Add expose headers
+  responseHeaders.push({
+    header: 'Access-Control-Expose-Headers',
+    operation: 'set',
+    value: '*',
+  });
+
+  // Create main rule
+  const mainRule = {
+    id: 1,
+    priority: 1,
+    action: {
+      type: 'modifyHeaders',
+      responseHeaders: responseHeaders,
+    },
+    condition: {
+      resourceTypes: ['main_frame', 'sub_frame', 'xmlhttprequest', 'other'],
+    },
+  };
+
+  // Add domain conditions if not all domains
+  if (
+    settings.domains &&
+    settings.domains.length > 0 &&
+    !settings.domains.includes('*')
+  ) {
+    mainRule.condition.requestDomains = settings.domains.map((domain) => {
+      if (domain.startsWith('*.')) {
+        return domain.substring(2);
+      }
+      return domain;
     });
+  }
 
-    // Rule 2: Handle preflight OPTIONS requests specifically
-    rules.push({
-      id: ruleId++,
+  rules.push(mainRule);
+
+  // Add rule for removing existing headers if requested
+  if (settings.removeExisting) {
+    const removeRule = {
+      id: 2,
       priority: 2,
       action: {
         type: 'modifyHeaders',
-        responseHeaders: corsHeaders,
-      },
-      condition: {
-        urlFilter: '*',
-        requestMethods: ['options'],
-      },
-    });
-
-    // Rule 3: Handle script and other resource types that might include fetch
-    rules.push({
-      id: ruleId++,
-      priority: 1,
-      action: {
-        type: 'modifyHeaders',
-        responseHeaders: corsHeaders,
-      },
-      condition: {
-        urlFilter: '*',
-        resourceTypes: ['script', 'other'],
-      },
-    });
-
-    // Rule 4: Handle main_frame and sub_frame requests
-    rules.push({
-      id: ruleId++,
-      priority: 1,
-      action: {
-        type: 'modifyHeaders',
-        responseHeaders: corsHeaders,
-      },
-      condition: {
-        urlFilter: '*',
-        resourceTypes: ['main_frame', 'sub_frame'],
-      },
-    });
-
-    // Rule 5: Comprehensive catch-all rule for all resource types
-    rules.push({
-      id: ruleId++,
-      priority: 1,
-      action: {
-        type: 'modifyHeaders',
-        responseHeaders: corsHeaders,
-      },
-      condition: {
-        urlFilter: '*',
-        resourceTypes: [
-          'csp_report',
-          'font',
-          'image',
-          'media',
-          'object',
-          'ping',
-          'script',
-          'stylesheet',
-          'sub_frame',
-          'webbundle',
-          'websocket',
-          'webtransport',
-          'xmlhttprequest',
-          'other',
+        responseHeaders: [
+          { header: 'Access-Control-Allow-Origin', operation: 'remove' },
+          { header: 'Access-Control-Allow-Methods', operation: 'remove' },
+          { header: 'Access-Control-Allow-Headers', operation: 'remove' },
+          { header: 'Access-Control-Allow-Credentials', operation: 'remove' },
+          { header: 'Access-Control-Expose-Headers', operation: 'remove' },
+          { header: 'Access-Control-Max-Age', operation: 'remove' },
         ],
       },
-    });
+      condition: {
+        resourceTypes: ['main_frame', 'sub_frame', 'xmlhttprequest', 'other'],
+      },
+    };
 
-    // Add the new rules
-    await chrome.declarativeNetRequest.updateDynamicRules({
-      addRules: rules,
-    });
-
-    if (currentSettings.debugMode) {
-      console.log(
-        'CORS rules updated successfully. Rules count:',
-        rules.length
-      );
-      console.log(
-        'Rule IDs:',
-        rules.map((r) => r.id)
-      );
-    }
-  } catch (error) {
-    console.error('Error setting up CORS rules:', error);
-
-    // If there's still an ID conflict, try to clear all rules and retry once
-    if (error.message.includes('unique ID')) {
-      try {
-        const allRules = await chrome.declarativeNetRequest.getDynamicRules();
-        if (allRules.length > 0) {
-          await chrome.declarativeNetRequest.updateDynamicRules({
-            removeRuleIds: allRules.map((r) => r.id),
-          });
-          console.log('Cleared all existing rules due to ID conflict');
+    if (
+      settings.domains &&
+      settings.domains.length > 0 &&
+      !settings.domains.includes('*')
+    ) {
+      removeRule.condition.requestDomains = settings.domains.map((domain) => {
+        if (domain.startsWith('*.')) {
+          return domain.substring(2);
         }
-      } catch (clearError) {
-        console.error('Error clearing rules:', clearError);
-      }
+        return domain;
+      });
     }
+
+    rules.push(removeRule);
   }
+
+  return rules;
 }
 
 // Get origin value based on settings
 function getOriginValue() {
-  switch (currentSettings.allowOrigin) {
+  switch (settings.allowOrigin) {
     case 'custom':
-      return currentSettings.customOrigin || '*';
+      return settings.customOrigin || '*';
     case 'request_origin':
-      return '*'; // For simplicity, use * (in production, you'd want to dynamically set this)
+      return '*'; // In declarativeNetRequest, we can't dynamically set to request origin
+    case '*':
     default:
       return '*';
   }
 }
 
-// Handle extension icon click
-chrome.action.onClicked.addListener(async () => {
-  corsEnabled = !corsEnabled;
-
-  // Update settings
-  const newSettings = { ...currentSettings, enabled: corsEnabled };
-  await chrome.storage.sync.set({ corsSettings: newSettings });
-
-  await updateIcon();
-  await setupCorsRules();
-
-  if (currentSettings.debugMode) {
-    console.log('CORS bypass toggled:', corsEnabled ? 'enabled' : 'disabled');
-  }
+// Handle extension icon clicks
+chrome.action.onClicked.addListener((tab) => {
+  // This will open the popup
 });
 
-// Handle messages from popup/options
+// Content script injection for advanced origin handling
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  switch (request.action) {
-    case 'getStatus':
-      sendResponse({
-        enabled: corsEnabled,
-        settings: currentSettings,
-      });
-      break;
-
-    case 'toggleCors':
-      corsEnabled = !corsEnabled;
-      updateSettings({ enabled: corsEnabled });
-      sendResponse({ enabled: corsEnabled });
-      break;
-
-    case 'updateSettings':
-      updateSettings(request.settings);
-      sendResponse({ success: true });
-      break;
-
-    default:
-      sendResponse({ error: 'Unknown action' });
+  if (request.action === 'toggleCors') {
+    settings.enabled = !settings.enabled;
+    chrome.storage.sync.set({ corsSettings: settings });
+    updateDynamicRules();
+    sendResponse({ enabled: settings.enabled });
   }
-
-  return true; // Keep message channel open for async response
 });
-
-// Update settings helper
-async function updateSettings(newSettings) {
-  try {
-    currentSettings = { ...currentSettings, ...newSettings };
-    corsEnabled = currentSettings.enabled;
-
-    await chrome.storage.sync.set({ corsSettings: currentSettings });
-    await updateIcon();
-    await setupCorsRules();
-
-    if (currentSettings.debugMode) {
-      console.log('Settings updated via message:', currentSettings);
-    }
-  } catch (error) {
-    console.error('Error updating settings:', error);
-  }
-}
-
-// Domain matching utility
-function isUrlAllowed(url, patterns) {
-  if (patterns.includes('*')) return true;
-
-  try {
-    const parsedUrl = new URL(url);
-    return patterns.some((pattern) => {
-      if (pattern.startsWith('*.')) {
-        const domain = pattern.substring(2);
-        return (
-          parsedUrl.hostname === domain ||
-          parsedUrl.hostname.endsWith('.' + domain)
-        );
-      }
-      return parsedUrl.hostname === pattern;
-    });
-  } catch (e) {
-    return false;
-  }
-}
-
-// Initialize on startup
-chrome.runtime.onStartup.addListener(async () => {
-  await loadSettings();
-  await updateIcon();
-  await setupCorsRules();
-});
-
-// Additional debugging: Log all network requests if debug mode is enabled
-chrome.webRequest.onBeforeRequest.addListener(
-  (details) => {
-    if (currentSettings.debugMode && corsEnabled) {
-      console.log('Request intercepted:', details.method, details.url);
-    }
-  },
-  { urls: ['<all_urls>'] },
-  ['requestBody']
-);
-
-chrome.webRequest.onHeadersReceived.addListener(
-  (details) => {
-    if (currentSettings.debugMode && corsEnabled) {
-      console.log(
-        'Response headers received:',
-        details.url,
-        details.responseHeaders
-      );
-    }
-  },
-  { urls: ['<all_urls>'] },
-  ['responseHeaders']
-);

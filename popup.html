@@ -1,79 +1,69 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CORS Bypass</title>
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <div class="popup-container">
-    <div class="header">
-      <div class="logo">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-          <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-          <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-        </svg>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>CORS Bypass Pro</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="popup-container">
+      <div class="header">
+        <h1>CORS Bypass Pro</h1>
+        <div class="version">v2.1.0</div>
       </div>
-      <div class="title">
-        <h1>CORS Bypass</h1>
-        <p>Development Tool</p>
+
+      <div class="status-section">
+        <div class="toggle-container">
+          <label class="switch">
+            <input type="checkbox" id="toggleEnabled" />
+            <span class="slider"></span>
+          </label>
+          <div class="status-info">
+            <span id="statusText">Enabled</span>
+            <div class="status-description">
+              Mode: <span id="modeIndicator">Active</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="quick-settings">
+        <div class="setting-row">
+          <label>Origin Mode:</label>
+          <select id="quickOriginMode">
+            <option value="request_origin">Allow All (*)</option>
+            <option value="*">Allow All (*)</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+
+        <div class="setting-row">
+          <label>
+            <input type="checkbox" id="quickCredentials" />
+            Allow Credentials
+          </label>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="optionsButton" class="btn btn-primary">
+          Advanced Settings
+        </button>
+        <button id="refreshButton" class="btn btn-secondary">
+          Refresh Page
+        </button>
+      </div>
+
+      <div class="footer">
+        <div class="stats">
+          <span id="domainCount">0</span> domains configured
+        </div>
+        <div class="mv3-notice">
+          <small>Using Manifest V3 - Enhanced Performance</small>
+        </div>
       </div>
     </div>
 
-    <div class="status-section">
-      <div class="status-indicator">
-        <div class="status-light" id="statusLight"></div>
-        <span id="statusText">Loading...</span>
-      </div>
-      
-      <div class="toggle-container">
-        <label class="switch">
-          <input type="checkbox" id="toggleEnabled">
-          <span class="slider"></span>
-        </label>
-      </div>
-    </div>
-
-    <div class="quick-settings">
-      <div class="setting-row">
-        <label>Origin Mode:</label>
-        <select id="originMode">
-          <option value="request_origin">Mirror Request</option>
-          <option value="*">Allow All (*)</option>
-          <option value="custom">Custom</option>
-        </select>
-      </div>
-
-      <div class="setting-row" id="customOriginRow" style="display: none;">
-        <label>Custom Origin:</label>
-        <input type="text" id="customOrigin" placeholder="https://example.com">
-      </div>
-
-      <div class="setting-row">
-        <label>
-          <input type="checkbox" id="allowCredentials">
-          Allow Credentials
-        </label>
-      </div>
-    </div>
-
-    <div class="actions">
-      <button id="saveButton" class="btn btn-primary">Save Settings</button>
-      <button id="optionsButton" class="btn btn-secondary">Advanced</button>
-    </div>
-
-    <div class="warning">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M10.29 3.86L1.82 18A2 2 0 0 0 3.24 21H20.76A2 2 0 0 0 22.18 18L13.71 3.86A2 2 0 0 0 10.29 3.86Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-        <line x1="12" y1="9" x2="12" y2="13" stroke="currentColor" stroke-width="2"/>
-        <line x1="12" y1="17" x2="12.01" y2="17" stroke="currentColor" stroke-width="2"/>
-      </svg>
-      <span>Development use only</span>
-    </div>
-  </div>
-
-  <script src="popup.js"></script>
-</body>
+    <script src="popup.js"></script>
+  </body>
 </html>

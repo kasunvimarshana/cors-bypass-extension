@@ -1,118 +1,99 @@
-// Popup script for CORS Bypass Extension
-document.addEventListener('DOMContentLoaded', async () => {
-  const toggleEnabled = document.getElementById('toggleEnabled');
-  const statusLight = document.getElementById('statusLight');
+document.addEventListener('DOMContentLoaded', () => {
+  const toggle = document.getElementById('toggleEnabled');
   const statusText = document.getElementById('statusText');
-  const originMode = document.getElementById('originMode');
-  const customOrigin = document.getElementById('customOrigin');
-  const customOriginRow = document.getElementById('customOriginRow');
-  const allowCredentials = document.getElementById('allowCredentials');
-  const saveButton = document.getElementById('saveButton');
+  const modeIndicator = document.getElementById('modeIndicator');
+  const quickOriginMode = document.getElementById('quickOriginMode');
+  const quickCredentials = document.getElementById('quickCredentials');
   const optionsButton = document.getElementById('optionsButton');
+  const refreshButton = document.getElementById('refreshButton');
+  const domainCount = document.getElementById('domainCount');
 
-  let currentSettings = {};
-
-  // Load current status and settings
-  await loadCurrentState();
+  // Load current settings
+  loadSettings();
 
   // Event listeners
-  toggleEnabled.addEventListener('change', handleToggle);
-  originMode.addEventListener('change', handleOriginModeChange);
-  saveButton.addEventListener('click', saveSettings);
+  toggle.addEventListener('change', updateEnabled);
+  quickOriginMode.addEventListener('change', updateQuickSettings);
+  quickCredentials.addEventListener('change', updateQuickSettings);
   optionsButton.addEventListener('click', openOptions);
+  refreshButton.addEventListener('click', refreshCurrentTab);
 
-  // Load current state from background script
-  async function loadCurrentState() {
+  async function loadSettings() {
     try {
-      const response = await chrome.runtime.sendMessage({ action: 'getStatus' });
-      currentSettings = response.settings;
-      
-      updateUI(response.enabled, response.settings);
+      const data = await chrome.storage.sync.get('corsSettings');
+      const settings = data.corsSettings || {};
+
+      const enabled = settings.enabled ?? true;
+      toggle.checked = enabled;
+      updateStatusDisplay(enabled);
+
+      quickOriginMode.value = settings.allowOrigin || 'request_origin';
+      quickCredentials.checked = settings.allowCredentials ?? true;
+
+      const domains = settings.domains || ['*'];
+      domainCount.textContent =
+        domains.length === 1 && domains[0] === '*'
+          ? 'All'
+          : domains.length.toString();
     } catch (error) {
-      console.error('Error loading state:', error);
-      statusText.textContent = 'Error loading status';
+      console.error('Error loading settings:', error);
     }
   }
 
-  // Update UI elements
-  function updateUI(enabled, settings) {
-    // Status indicator
-    toggleEnabled.checked = enabled;
-    statusLight.className = `status-light ${enabled ? 'active' : 'inactive'}`;
-    statusText.textContent = enabled ? 'CORS Bypass Active' : 'CORS Bypass Disabled';
-
-    // Settings
-    originMode.value = settings.allowOrigin;
-    customOrigin.value = settings.customOrigin || '';
-    allowCredentials.checked = settings.allowCredentials;
-
-    // Show/hide custom origin input
-    handleOriginModeChange();
-  }
-
-  // Handle toggle switch
-  async function handleToggle() {
-    const enabled = toggleEnabled.checked;
-    
+  async function updateEnabled() {
     try {
-      const response = await chrome.runtime.sendMessage({ 
-        action: 'toggleCors' 
+      const enabled = toggle.checked;
+      updateStatusDisplay(enabled);
+
+      const data = await chrome.storage.sync.get('corsSettings');
+      const settings = data.corsSettings || {};
+      await chrome.storage.sync.set({
+        corsSettings: { ...settings, enabled },
       });
-      
-      statusLight.className = `status-light ${response.enabled ? 'active' : 'inactive'}`;
-      statusText.textContent = response.enabled ? 'CORS Bypass Active' : 'CORS Bypass Disabled';
     } catch (error) {
-      console.error('Error toggling CORS:', error);
-      // Revert toggle if error
-      toggleEnabled.checked = !enabled;
+      console.error('Error updating enabled state:', error);
     }
   }
 
-  // Handle origin mode change
-  function handleOriginModeChange() {
-    const isCustom = originMode.value === 'custom';
-    customOriginRow.style.display = isCustom ? 'block' : 'none';
-  }
-
-  // Save settings
-  async function saveSettings() {
-    const newSettings = {
-      ...currentSettings,
-      allowOrigin: originMode.value,
-      customOrigin: customOrigin.value,
-      allowCredentials: allowCredentials.checked
-    };
-
+  async function updateQuickSettings() {
     try {
-      saveButton.textContent = 'Saving...';
-      saveButton.disabled = true;
-
-      await chrome.runtime.sendMessage({
-        action: 'updateSettings',
-        settings: newSettings
+      const data = await chrome.storage.sync.get('corsSettings');
+      const settings = data.corsSettings || {};
+      await chrome.storage.sync.set({
+        corsSettings: {
+          ...settings,
+          allowOrigin: quickOriginMode.value,
+          allowCredentials: quickCredentials.checked,
+        },
       });
-
-      currentSettings = newSettings;
-      
-      // Show success feedback
-      saveButton.textContent = 'Saved!';
-      setTimeout(() => {
-        saveButton.textContent = 'Save Settings';
-        saveButton.disabled = false;
-      }, 1000);
-
     } catch (error) {
-      console.error('Error saving settings:', error);
-      saveButton.textContent = 'Error';
-      setTimeout(() => {
-        saveButton.textContent = 'Save Settings';
-        saveButton.disabled = false;
-      }, 1000);
+      console.error('Error updating quick settings:', error);
     }
   }
 
-  // Open options page
+  function updateStatusDisplay(enabled) {
+    statusText.textContent = enabled ? 'Enabled' : 'Disabled';
+    statusText.className = enabled ? 'status-enabled' : 'status-disabled';
+    modeIndicator.textContent = enabled ? 'Active (MV3)' : 'Inactive';
+    modeIndicator.className = enabled ? 'mode-active' : 'mode-inactive';
+  }
+
   function openOptions() {
     chrome.runtime.openOptionsPage();
+  }
+
+  async function refreshCurrentTab() {
+    try {
+      const [tab] = await chrome.tabs.query({
+        active: true,
+        currentWindow: true,
+      });
+      if (tab) {
+        await chrome.tabs.reload(tab.id);
+        window.close();
+      }
+    } catch (error) {
+      console.error('Error refreshing tab:', error);
+    }
   }
 });

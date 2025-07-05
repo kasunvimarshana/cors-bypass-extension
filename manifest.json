@@ -1,17 +1,15 @@
 {
-  "manifest_version": 3,
   "name": "CORS Bypass Pro",
-  "version": "2.0.0",
-  "description": "Advanced CORS bypass extension for developers with customizable settings",
+  "version": "2.1.0",
+  "description": "Professional CORS bypass solution for developers with advanced customization options",
+  "manifest_version": 3,
   "permissions": [
-    "webRequest",
     "storage",
+    "activeTab",
     "declarativeNetRequest",
     "declarativeNetRequestWithHostAccess"
   ],
-  "host_permissions": [
-    "<all_urls>"
-  ],
+  "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"
   },
@@ -30,11 +28,22 @@
   },
   "icons": {
     "16": "icons/icon16.png",
-    "32": "icons/icon32.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
+  "web_accessible_resources": [
+    {
+      "resources": ["styles.css"],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "declarative_net_request": {
-    "rule_resources": []
+    "rule_resources": [
+      {
+        "id": "cors_rules",
+        "enabled": true,
+        "path": "rules.json"
+      }
+    ]
   }
 }

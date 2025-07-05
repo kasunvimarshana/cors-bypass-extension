@@ -1,4 +1,3 @@
-// Options page script for CORS Bypass Extension
 const DEFAULT_SETTINGS = {
   enabled: true,
   allowOrigin: 'request_origin',
@@ -8,199 +7,203 @@ const DEFAULT_SETTINGS = {
   allowCredentials: true,
   domains: ['*'],
   removeExisting: true,
-  debugMode: false
+  logRequests: false,
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-  // Get DOM elements
-  const globalToggle = document.getElementById('globalToggle');
-  const debugMode = document.getElementById('debugMode');
-  const originRadios = document.querySelectorAll('input[name="origin"]');
-  const customOrigin = document.getElementById('customOrigin');
-  const customOriginSetting = document.getElementById('customOriginSetting');
-  const allowedMethods = document.getElementById('allowedMethods');
-  const allowedHeaders = document.getElementById('allowedHeaders');
-  const allowCredentials = document.getElementById('allowCredentials');
-  const removeExisting = document.getElementById('removeExisting');
-  const domainList = document.getElementById('domainList');
-  const saveButton = document.getElementById('saveButton');
-  const resetButton = document.getElementById('resetButton');
-  const exportButton = document.getElementById('exportButton');
-  const importButton = document.getElementById('importButton');
-  const importFile = document.getElementById('importFile');
-  const statusMessage = document.getElementById('statusMessage');
-
-  // Load saved settings on page load
   loadSettings();
 
   // Event listeners
-  saveButton.addEventListener('click', saveSettings);
-  resetButton.addEventListener('click', resetSettings);
-  exportButton.addEventListener('click', exportSettings);
-  importButton.addEventListener('click', () => importFile.click());
-  importFile.addEventListener('change', importSettings);
+  document.getElementById('saveButton').addEventListener('click', saveSettings);
+  document
+    .getElementById('resetButton')
+    .addEventListener('click', resetSettings);
+  document
+    .getElementById('exportButton')
+    .addEventListener('click', exportSettings);
+  document
+    .getElementById('importButton')
+    .addEventListener('click', importSettings);
+  document
+    .getElementById('fileInput')
+    .addEventListener('change', handleFileImport);
 
-  // Origin radio change handler
-  originRadios.forEach(radio => {
-    radio.addEventListener('change', handleOriginChange);
+  // Enable/disable custom origin input based on radio selection
+  document.querySelectorAll('input[name="origin"]').forEach((radio) => {
+    radio.addEventListener('change', updateCustomOriginState);
   });
+});
 
-  // Load settings from storage
-  async function loadSettings() {
-    try {
-      const result = await chrome.storage.sync.get('corsSettings');
-      const settings = { ...DEFAULT_SETTINGS, ...result.corsSettings };
-      
-      // Populate form fields
-      globalToggle.checked = settings.enabled;
-      debugMode.checked = settings.debugMode;
-      
-      // Set origin radio
-      const originRadio = document.querySelector(`input[name="origin"][value="${settings.allowOrigin}"]`);
-      if (originRadio) {
-        originRadio.checked = true;
-      }
-      
-      customOrigin.value = settings.customOrigin;
-      allowedMethods.value = settings.allowMethods;
-      allowedHeaders.value = settings.allowHeaders;
-      allowCredentials.checked = settings.allowCredentials;
-      removeExisting.checked = settings.removeExisting;
-      domainList.value = settings.domains.join('\n');
-      
-      // Handle custom origin visibility
-      handleOriginChange();
-      
-    } catch (error) {
-      console.error('Error loading settings:', error);
-      showStatus('Error loading settings', 'error');
-    }
+async function loadSettings() {
+  try {
+    const data = await chrome.storage.sync.get('corsSettings');
+    const settings = data.corsSettings || DEFAULT_SETTINGS;
+
+    // General settings
+    document.getElementById('globalToggle').checked = settings.enabled;
+    document.getElementById('logRequests').checked = settings.logRequests;
+
+    // Origin settings
+    document.querySelector(
+      `input[name="origin"][value="${settings.allowOrigin}"]`
+    ).checked = true;
+    document.getElementById('customOrigin').value = settings.customOrigin || '';
+
+    // Permission settings
+    document.getElementById('allowedMethods').value = settings.allowMethods;
+    document.getElementById('allowedHeaders').value = settings.allowHeaders;
+    document.getElementById('allowCredentials').checked =
+      settings.allowCredentials;
+    document.getElementById('removeExisting').checked = settings.removeExisting;
+
+    // Domain settings
+    document.getElementById('domainList').value = settings.domains.join('\n');
+
+    updateCustomOriginState();
+  } catch (error) {
+    console.error('Error loading settings:', error);
   }
+}
 
-  // Save settings to storage
-  async function saveSettings() {
-    try {
-      saveButton.textContent = 'Saving...';
-      saveButton.disabled = true;
+async function saveSettings() {
+  try {
+    const settings = {
+      enabled: document.getElementById('globalToggle').checked,
+      allowOrigin: document.querySelector('input[name="origin"]:checked').value,
+      customOrigin: document.getElementById('customOrigin').value.trim(),
+      allowMethods: document.getElementById('allowedMethods').value.trim(),
+      allowHeaders: document.getElementById('allowedHeaders').value.trim(),
+      allowCredentials: document.getElementById('allowCredentials').checked,
+      removeExisting: document.getElementById('removeExisting').checked,
+      logRequests: document.getElementById('logRequests').checked,
+      domains: document
+        .getElementById('domainList')
+        .value.split('\n')
+        .map((d) => d.trim())
+        .filter((d) => d.length > 0),
+    };
 
-      const selectedOrigin = document.querySelector('input[name="origin"]:checked')?.value || 'request_origin';
-      
-      const newSettings = {
-        enabled: globalToggle.checked,
-        debugMode: debugMode.checked,
-        allowOrigin: selectedOrigin,
-        customOrigin: customOrigin.value.trim(),
-        allowMethods: allowedMethods.value.trim(),
-        allowHeaders: allowedHeaders.value.trim(),
-        allowCredentials: allowCredentials.checked,
-        removeExisting: removeExisting.checked,
-        domains: domainList.value
-          .split('\n')
-          .map(d => d.trim())
-          .filter(d => d.length > 0)
-      };
-
-      // Validate settings
-      if (selectedOrigin === 'custom' && !newSettings.customOrigin) {
-        throw new Error('Custom origin cannot be empty when custom mode is selected');
-      }
-
-      if (newSettings.domains.length === 0) {
-        newSettings.domains = ['*'];
-      }
-
-      await chrome.storage.sync.set({ corsSettings: newSettings });
-      
-      showStatus('Settings saved successfully!', 'success');
-      
-    } catch (error) {
-      console.error('Error saving settings:', error);
-      showStatus(`Error saving settings: ${error.message}`, 'error');
-    } finally {
-      saveButton.textContent = 'Save All Settings';
-      saveButton.disabled = false;
-    }
-  }
-
-  // Reset settings to defaults
-  async function resetSettings() {
-    if (!confirm('Are you sure you want to reset all settings to defaults? This cannot be undone.')) {
+    // Validation
+    if (settings.allowOrigin === 'custom' && !settings.customOrigin) {
+      alert('Please enter a custom origin URL');
       return;
     }
 
+    if (settings.domains.length === 0) {
+      settings.domains = ['*'];
+    }
+
+    await chrome.storage.sync.set({ corsSettings: settings });
+    showNotification('Settings saved successfully!', 'success');
+  } catch (error) {
+    console.error('Error saving settings:', error);
+    showNotification('Error saving settings', 'error');
+  }
+}
+
+async function resetSettings() {
+  if (confirm('Are you sure you want to reset all settings to defaults?')) {
     try {
       await chrome.storage.sync.set({ corsSettings: DEFAULT_SETTINGS });
       loadSettings();
-      showStatus('Settings reset to defaults', 'success');
+      showNotification('Settings reset to defaults', 'success');
     } catch (error) {
       console.error('Error resetting settings:', error);
-      showStatus('Error resetting settings', 'error');
+      showNotification('Error resetting settings', 'error');
     }
   }
+}
 
-  // Export settings to JSON file
-  async function exportSettings() {
-    try {
-      const result = await chrome.storage.sync.get('corsSettings');
-      const settings = { ...DEFAULT_SETTINGS, ...result.corsSettings };
-      
-      const dataStr = JSON.stringify(settings, null, 2);
-      const dataBlob = new Blob([dataStr], { type: 'application/json' });
-      
-      const url = URL.createObjectURL(dataBlob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `cors-bypass-settings-${new Date().toISOString().split('T')[0]}.json`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      
-      showStatus('Settings exported successfully', 'success');
-    } catch (error) {
-      console.error('Error exporting settings:', error);
-      showStatus('Error exporting settings', 'error');
-    }
+async function exportSettings() {
+  try {
+    const data = await chrome.storage.sync.get('corsSettings');
+    const settings = data.corsSettings || DEFAULT_SETTINGS;
+    const blob = new Blob([JSON.stringify(settings, null, 2)], {
+      type: 'application/json',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'cors-bypass-settings.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Error exporting settings:', error);
+    showNotification('Error exporting settings', 'error');
   }
+}
 
-  // Import settings from JSON file
-  async function importSettings(event) {
-    const file = event.target.files[0];
-    if (!file) return;
+function importSettings() {
+  document.getElementById('fileInput').click();
+}
 
+async function handleFileImport(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
     try {
-      const text = await file.text();
-      const importedSettings = JSON.parse(text);
-      
-      // Validate imported settings
-      const validatedSettings = { ...DEFAULT_SETTINGS, ...importedSettings };
-      
-      await chrome.storage.sync.set({ corsSettings: validatedSettings });
+      const settings = JSON.parse(e.target.result);
+      await chrome.storage.sync.set({ corsSettings: settings });
       loadSettings();
-      showStatus('Settings imported successfully', 'success');
-      
+      showNotification('Settings imported successfully!', 'success');
     } catch (error) {
       console.error('Error importing settings:', error);
-      showStatus('Error importing settings: Invalid file format', 'error');
-    } finally {
-      importFile.value = ''; // Reset file input
+      showNotification('Error importing settings: Invalid JSON file', 'error');
     }
-  }
+  };
+  reader.readAsText(file);
+}
 
-  // Handle origin radio button changes
-  function handleOriginChange() {
-    const selectedOrigin = document.querySelector('input[name="origin"]:checked')?.value;
-    customOriginSetting.style.display = selectedOrigin === 'custom' ? 'block' : 'none';
+function updateCustomOriginState() {
+  const customRadio = document.querySelector(
+    'input[name="origin"][value="custom"]'
+  );
+  const customOriginInput = document.getElementById('customOrigin');
+  customOriginInput.disabled = !customRadio.checked;
+  if (customRadio.checked) {
+    customOriginInput.focus();
   }
+}
 
-  // Show status message
-  function showStatus(message, type = 'info') {
-    statusMessage.textContent = message;
-    statusMessage.className = `status-message ${type}`;
-    statusMessage.style.display = 'block';
-    
+function showNotification(message, type = 'info') {
+  const notification = document.createElement('div');
+  notification.className = `notification notification-${type}`;
+  notification.textContent = message;
+
+  document.body.appendChild(notification);
+
+  setTimeout(() => {
+    notification.classList.add('notification-show');
+  }, 100);
+
+  setTimeout(() => {
+    notification.classList.remove('notification-show');
     setTimeout(() => {
-      statusMessage.style.display = 'none';
-    }, 5000);
+      document.body.removeChild(notification);
+    }, 300);
+  }, 3000);
+}
+
+// Add MV3 specific notice to options page
+document.addEventListener('DOMContentLoaded', () => {
+  const footer = document.querySelector('.footer .info');
+  if (footer) {
+    const mv3Notice = document.createElement('div');
+    mv3Notice.innerHTML = `
+      <p><strong>Manifest V3 Update:</strong> This extension now uses the modern declarativeNetRequest API 
+      for better performance and security. Some advanced features like dynamic origin mirroring are limited 
+      by the new API but overall functionality remains the same.</p>
+    `;
+    mv3Notice.style.marginTop = '15px';
+    mv3Notice.style.padding = '10px';
+    mv3Notice.style.background = '#e3f2fd';
+    mv3Notice.style.border = '1px solid #2196f3';
+    mv3Notice.style.borderRadius = '4px';
+    mv3Notice.style.fontSize = '13px';
+    footer.appendChild(mv3Notice);
   }
 });
