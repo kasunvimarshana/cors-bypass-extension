@@ -1,14 +1,16 @@
-// Content Script for CORS Bypass Extension
-(function () {
+// Enhanced Content Script for CORS Bypass Extension
+(function() {
   'use strict';
 
   class CORSContentScript {
     constructor() {
-      console.log('📄 CORS Content Script initializing...');
+      this.logger = new Logger('Content');
       this.init();
     }
 
     init() {
+      this.logger.info('🎯 Initializing CORS Content Script...');
+      
       // Inject the main script into the page
       this.injectScript();
 
@@ -16,90 +18,119 @@
       window.addEventListener('message', (event) => {
         if (event.source !== window) return;
 
-        if (event.data.type === 'CORS_BYPASS_REQUEST') {
-          console.log('📨 Received CORS bypass request:', event.data);
-          this.handleCORSRequest(event.data);
+        switch (event.data.type) {
+          case 'CORS_BYPASS_REQUEST':
+            this.handleCORSRequest(event.data);
+            break;
+          case 'CORS_ERROR_DETECTED':
+            this.handleCORSError(event.data);
+            break;
+          case 'XHR_CORS_ERROR':
+            this.handleXHRError(event.data);
+            break;
         }
       });
 
       // Monitor for CORS errors
       this.monitorCORSErrors();
-
-      console.log('✅ Content script initialized successfully');
+      
+      this.logger.success('✅ Content script initialized successfully');
     }
 
     injectScript() {
-      console.log('💉 Injecting script into page...');
       try {
         const script = document.createElement('script');
         script.src = chrome.runtime.getURL('inject.js');
-        script.onload = function () {
-          console.log('✅ Inject script loaded successfully');
+        script.onload = function() {
           this.remove();
         };
-        script.onerror = function () {
-          console.error('❌ Failed to load inject script');
+        script.onerror = (error) => {
+          this.logger.error('Failed to inject script:', error);
         };
+        
         (document.head || document.documentElement).appendChild(script);
+        this.logger.debug('Inject script added to DOM');
       } catch (error) {
-        console.error('❌ Error injecting script:', error);
+        this.logger.error('Error injecting script:', error);
       }
     }
 
     async handleCORSRequest(data) {
-      console.log('🔄 Handling CORS request:', data.url);
       try {
+        this.logger.info('Handling CORS request:', data.url);
+        
         const response = await chrome.runtime.sendMessage({
           action: 'makeRequest',
           url: data.url,
-          options: data.options,
+          options: data.options
         });
 
-        console.log('📥 CORS request response:', response);
+        this.logger.debug('CORS request response:', response.success);
 
         // Send response back to injected script
-        window.postMessage(
-          {
-            type: 'CORS_BYPASS_RESPONSE',
-            requestId: data.requestId,
-            response: response,
-          },
-          '*'
-        );
+        window.postMessage({
+          type: 'CORS_BYPASS_RESPONSE',
+          requestId: data.requestId,
+          response: response
+        }, '*');
       } catch (error) {
-        console.error('❌ Error handling CORS request:', error);
-        window.postMessage(
-          {
-            type: 'CORS_BYPASS_RESPONSE',
-            requestId: data.requestId,
-            response: {
-              success: false,
-              error: error.message,
-            },
-          },
-          '*'
-        );
+        this.logger.error('Error handling CORS request:', error);
+        
+        window.postMessage({
+          type: 'CORS_BYPASS_RESPONSE',
+          requestId: data.requestId,
+          response: {
+            success: false,
+            error: error.message
+          }
+        }, '*');
       }
     }
 
-    monitorCORSErrors() {
-      console.log('👁️ Setting up CORS error monitoring...');
+    handleCORSError(data) {
+      this.logger.warn('CORS error detected:', data.message);
+      
+      // Could notify background script about CORS errors
+      chrome.runtime.sendMessage({
+        action: 'corsErrorDetected',
+        error: data.message,
+        timestamp: data.timestamp,
+        url: window.location.href
+      }).catch(() => {
+        // Ignore errors
+      });
+    }
 
+    handleXHRError(data) {
+      this.logger.warn('XHR CORS error detected:', data.url);
+      
+      // Could notify background script about XHR errors
+      chrome.runtime.sendMessage({
+        action: 'xhrErrorDetected',
+        method: data.method,
+        url: data.url,
+        timestamp: data.timestamp,
+        pageUrl: window.location.href
+      }).catch(() => {
+        // Ignore errors
+      });
+    }
+
+    monitorCORSErrors() {
       // Override console.error to catch CORS errors
       const originalError = console.error;
-      console.error = function (...args) {
+      const self = this;
+      
+      console.error = function(...args) {
         const message = args.join(' ');
         if (message.includes('CORS') || message.includes('Cross-Origin')) {
-          console.log('🚨 CORS error detected:', message);
-          // Notify about CORS error
-          window.postMessage(
-            {
-              type: 'CORS_ERROR_DETECTED',
-              message: message,
-              timestamp: new Date().toISOString(),
-            },
-            '*'
-          );
+          self.logger.debug('Console CORS error intercepted:', message);
+          
+          window.postMessage({
+            type: 'CORS_ERROR_DETECTED',
+            message: message,
+            timestamp: new Date().toISOString()
+          }, '*');
         }
         originalError.apply(console, args);
       };
@@ -108,57 +139,99 @@
       const originalXHROpen = XMLHttpRequest.prototype.open;
       const originalXHRSend = XMLHttpRequest.prototype.send;
 
-      XMLHttpRequest.prototype.open = function (
-        method,
-        url,
-        async,
-        user,
-        password
-      ) {
-        this._method = method;
-        this._url = url;
-        console.log('📡 XHR opened:', method, url);
+      XMLHttpRequest.prototype.open = function(method, url, async, user, password) {
+        this._corsMethod = method;
+        this._corsUrl = url;
         return originalXHROpen.call(this, method, url, async, user, password);
       };
 
-      XMLHttpRequest.prototype.send = function (data) {
+      XMLHttpRequest.prototype.send = function(data) {
         const xhr = this;
-        console.log('📤 XHR sending:', xhr._method, xhr._url);
 
         // Add error listener
-        xhr.addEventListener('error', function () {
-          console.log('🚨 XHR CORS error detected:', xhr._method, xhr._url);
-          window.postMessage(
-            {
-              type: 'XHR_CORS_ERROR',
-              method: xhr._method,
-              url: xhr._url,
-              timestamp: new Date().toISOString(),
-            },
-            '*'
-          );
-        });
-
-        // Add load listener for success logging
-        xhr.addEventListener('load', function () {
-          console.log('✅ XHR completed:', xhr._method, xhr._url, xhr.status);
+        xhr.addEventListener('error', function() {
+          self.logger.debug('XHR error intercepted:', xhr._corsUrl);
+          
+          window.postMessage({
+            type: 'XHR_CORS_ERROR',
+            method: xhr._corsMethod,
+            url: xhr._corsUrl,
+            timestamp: new Date().toISOString()
+          }, '*');
         });
 
         return originalXHRSend.call(this, data);
       };
 
-      console.log('✅ CORS error monitoring set up');
+      // Monitor fetch for CORS errors
+      const originalFetch = window.fetch;
+      
+      window.fetch = function(input, init) {
+        const url = typeof input === 'string' ? input : input.url;
+        
+        return originalFetch.call(this, input, init).catch(error => {
+          if (error.message.includes('CORS') || error.message.includes('Cross-Origin')) {
+            self.logger.debug('Fetch CORS error intercepted:', url);
+            
+            window.postMessage({
+              type: 'CORS_ERROR_DETECTED',
+              message: error.message,
+              url: url,
+              timestamp: new Date().toISOString()
+            }, '*');
+          }
+          throw error;
+        });
+      };
+
+      this.logger.debug('CORS error monitoring enabled');
     }
   }
 
-  // Initialize content script
+  // Simple logger for content script
+  class Logger {
+    constructor(context) {
+      this.context = context;
+    }
+
+    log(level, message, ...args) {
+      const timestamp = new Date().toISOString();
+      const formattedMessage = `[${timestamp}] [${this.context}] ${message}`;
+      
+      switch (level) {
+        case 'ERROR':
+          console.error(formattedMessage, ...args);
+          break;
+        case 'WARN':
+          console.warn(formattedMessage, ...args);
+          break;
+        case 'INFO':
+          console.info(formattedMessage, ...args);
+          break;
+        case 'DEBUG':
+          console.debug(formattedMessage, ...args);
+          break;
+        case 'SUCCESS':
+          console.log(`%c${formattedMessage}`, 'color: #4CAF50; font-weight: bold;', ...args);
+          break;
+        default:
+          console.log(formattedMessage, ...args);
+      }
+    }
+
+    error(message, ...args) { this.log('ERROR', message, ...args); }
+    warn(message, ...args) { this.log('WARN', message, ...args); }
+    info(message, ...args) { this.log('INFO', message, ...args); }
+    debug(message, ...args) { this.log('DEBUG', message, ...args); }
+    success(message, ...args) { this.log('SUCCESS', message, ...args); }
+  }
+
+  // Initialize content script based on document state
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
-      console.log('🎬 DOM loaded, initializing content script...');
       new CORSContentScript();
     });
   } else {
-    console.log('🎬 DOM already loaded, initializing content script...');
     new CORSContentScript();
   }
 })();

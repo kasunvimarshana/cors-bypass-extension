@@ -1,245 +1,386 @@
+// Enhanced CORS Popup Controller
 class CORSPopup {
   constructor() {
-    console.log('🎨 CORS Popup initializing...');
+    this.logger = new Logger('Popup');
     this.init();
   }
 
   init() {
+    this.logger.info('🎯 Initializing CORS Popup...');
     this.bindEvents();
     this.loadStatus();
+    this.logger.success('✅ Popup initialized successfully');
   }
 
   bindEvents() {
-    console.log('🔗 Binding popup events...');
+    this.logger.debug('Binding popup events...');
+    
+    // Toggle button
     document.getElementById('toggleBtn').addEventListener('click', () => {
-      console.log('🔄 Toggle button clicked');
+      this.logger.info('Toggle button clicked');
       this.toggleExtension();
     });
 
+    // Test section toggle
     document.getElementById('testBtn').addEventListener('click', () => {
-      console.log('🧪 Test button clicked');
+      this.logger.info('Test button clicked');
       this.toggleTestSection();
     });
 
+    // Send test request
     document.getElementById('sendTestBtn').addEventListener('click', () => {
-      console.log('📤 Send test button clicked');
+      this.logger.info('Send test request clicked');
       this.sendTestRequest();
     });
 
-    document.getElementById('rulesBtn').addEventListener('click', () => {
-      console.log('⚙️ Rules button clicked');
-      this.showRules();
+    // Logs section toggle
+    document.getElementById('logsBtn').addEventListener('click', () => {
+      this.logger.info('Logs button clicked');
+      this.toggleLogsSection();
     });
 
+    // Refresh logs
+    document.getElementById('refreshLogsBtn').addEventListener('click', () => {
+      this.logger.info('Refresh logs clicked');
+      this.refreshLogs();
+    });
+
+    // Clear cache
     document.getElementById('clearBtn').addEventListener('click', () => {
-      console.log('🗑️ Clear button clicked');
+      this.logger.info('Clear cache clicked');
       this.clearCache();
     });
+
+    // Test URL input enter key
+    document.getElementById('testUrl').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        this.sendTestRequest();
+      }
+    });
+
+    this.logger.debug('Event binding completed');
   }
 
   async loadStatus() {
-    console.log('📊 Loading extension status...');
     try {
-      const response = await chrome.runtime.sendMessage({
-        action: 'getStatus',
-      });
-      console.log('✅ Status loaded:', response);
+      this.logger.info('Loading extension status...');
+      const response = await this.sendMessage({ action: 'getStatus' });
+      this.logger.debug('Status response:', response);
       this.updateUI(response.enabled);
     } catch (error) {
-      console.error('❌ Error loading status:', error);
-      // Show error state
-      this.updateUI(false);
+      this.logger.error('Error loading status:', error);
       this.showError('Failed to load extension status');
     }
   }
 
   async toggleExtension() {
-    console.log('🔄 Toggling extension...');
-    const toggleBtn = document.getElementById('toggleBtn');
-    const originalText = toggleBtn.textContent;
-
-    // Show loading state
-    toggleBtn.textContent = 'Loading...';
-    toggleBtn.disabled = true;
-
     try {
-      const response = await chrome.runtime.sendMessage({
-        action: 'toggle',
-      });
-      console.log('✅ Toggle response:', response);
+      const toggleBtn = document.getElementById('toggleBtn');
+      // toggleBtn.disabled = true;
+      toggleBtn.textContent = 'Loading...';
+      
+      this.logger.info('Toggling extension...');
+      const response = await this.sendMessage({ action: 'toggle' });
+      this.logger.info('Toggle response:', response);
+      
       this.updateUI(response.enabled);
+      this.showNotification(
+        response.enabled ? 'Extension enabled' : 'Extension disabled',
+        response.enabled ? 'success' : 'warning'
+      );
     } catch (error) {
-      console.error('❌ Error toggling extension:', error);
+      this.logger.error('Error toggling extension:', error);
       this.showError('Failed to toggle extension');
-
-      // Restore button state
-      toggleBtn.textContent = originalText;
-      toggleBtn.disabled = false;
+    } finally {
+      // document.getElementById('toggleBtn').disabled = false;
     }
   }
 
   updateUI(enabled) {
-    console.log('🎨 Updating UI - enabled:', enabled);
+    this.logger.debug('Updating UI with enabled state:', enabled);
+    
+    const statusCard = document.getElementById('statusCard');
     const statusDot = document.getElementById('statusDot');
     const statusText = document.getElementById('statusText');
     const toggleBtn = document.getElementById('toggleBtn');
 
+    // Update status indicator
     if (enabled) {
       statusDot.className = 'status-dot active';
       statusText.textContent = 'CORS Bypass Active';
+      statusText.className = 'status-text success';
       toggleBtn.textContent = 'Disable';
       toggleBtn.className = 'toggle-btn active';
+      statusCard.className = 'status-card active';
     } else {
       statusDot.className = 'status-dot inactive';
       statusText.textContent = 'CORS Bypass Disabled';
+      statusText.className = 'status-text error';
       toggleBtn.textContent = 'Enable';
       toggleBtn.className = 'toggle-btn inactive';
+      statusCard.className = 'status-card inactive';
     }
 
-    // Re-enable button
-    toggleBtn.disabled = false;
-  }
-
-  showError(message) {
-    console.error('🚨 Showing error:', message);
-    const statusText = document.getElementById('statusText');
-    statusText.textContent = `Error: ${message}`;
-    statusText.style.color = '#f44336';
-
-    // Reset color after 3 seconds
-    setTimeout(() => {
-      statusText.style.color = '';
-    }, 3000);
+    // Add fade-in animation
+    statusCard.classList.add('fade-in');
+    
+    this.logger.success('UI updated successfully');
   }
 
   toggleTestSection() {
-    console.log('🧪 Toggling test section...');
     const testSection = document.getElementById('testSection');
-    const isHidden = testSection.classList.contains('hidden');
-
-    if (isHidden) {
-      testSection.classList.remove('hidden');
-      console.log('✅ Test section shown');
-    } else {
-      testSection.classList.add('hidden');
-      console.log('✅ Test section hidden');
+    const logsSection = document.getElementById('logsSection');
+    
+    // Hide logs section if visible
+    logsSection.classList.add('hidden');
+    
+    // Toggle test section
+    testSection.classList.toggle('hidden');
+    
+    if (!testSection.classList.contains('hidden')) {
+      testSection.classList.add('fade-in');
+      document.getElementById('testUrl').focus();
     }
+    
+    this.logger.debug('Test section toggled');
+  }
+
+  toggleLogsSection() {
+    const logsSection = document.getElementById('logsSection');
+    const testSection = document.getElementById('testSection');
+    
+    // Hide test section if visible
+    testSection.classList.add('hidden');
+    
+    // Toggle logs section
+    logsSection.classList.toggle('hidden');
+    
+    if (!logsSection.classList.contains('hidden')) {
+      logsSection.classList.add('fade-in');
+      this.refreshLogs();
+    }
+    
+    this.logger.debug('Logs section toggled');
   }
 
   async sendTestRequest() {
-    console.log('📤 Sending test request...');
     const url = document.getElementById('testUrl').value.trim();
     const resultDiv = document.getElementById('testResult');
+    const sendBtn = document.getElementById('sendTestBtn');
 
     if (!url) {
-      console.warn('⚠️ No URL provided for test');
-      resultDiv.innerHTML = '<div class="error">Please enter a URL</div>';
+      this.showError('Please enter a URL');
       return;
     }
 
-    // Validate URL
     try {
-      new URL(url);
-    } catch (e) {
-      console.warn('⚠️ Invalid URL:', url);
-      resultDiv.innerHTML = '<div class="error">Please enter a valid URL</div>';
-      return;
-    }
+      sendBtn.disabled = true;
+      sendBtn.textContent = 'Testing...';
+      resultDiv.innerHTML = '<div class="loading">🔄 Testing CORS request...</div>';
+      resultDiv.style.display = 'block';
 
-    resultDiv.innerHTML = 'Testing... 🔄';
-    console.log('🌐 Testing URL:', url);
-
-    try {
-      const response = await chrome.runtime.sendMessage({
+      this.logger.info('Sending test request to:', url);
+      
+      const response = await this.sendMessage({
         action: 'makeRequest',
         url: url,
-        options: { method: 'GET' },
+        options: { method: 'GET' }
       });
 
-      console.log('📥 Test response:', response);
+      this.logger.debug('Test request response:', response);
 
       if (response.success) {
-        const dataPreview =
-          typeof response.data === 'string'
-            ? response.data.substring(0, 200)
-            : JSON.stringify(response.data).substring(0, 200);
-
+        const dataPreview = typeof response.data === 'string' 
+          ? response.data.substring(0, 300) 
+          : JSON.stringify(response.data, null, 2).substring(0, 300);
+        
         resultDiv.innerHTML = `
-          <div class="success">✅ Success!</div>
-          <div><strong>Status:</strong> ${response.status} ${
-          response.statusText
-        }</div>
-          <div><strong>Response:</strong> ${dataPreview}${
-          dataPreview.length >= 200 ? '...' : ''
-        }</div>
+          <div class="success">✅ Request Successful!</div>
+          <div><strong>Status:</strong> ${response.status} ${response.statusText}</div>
+          <div><strong>Headers:</strong> ${Object.keys(response.headers || {}).length} headers received</div>
+          <div><strong>Data Preview:</strong></div>
+          <pre style="white-space: pre-wrap; word-break: break-word;">${dataPreview}${dataPreview.length >= 300 ? '...' : ''}</pre>
         `;
+        
+        this.logger.success('Test request completed successfully');
       } else {
         resultDiv.innerHTML = `
-          <div class="error">❌ Failed</div>
+          <div class="error">❌ Request Failed</div>
           <div><strong>Error:</strong> ${response.error}</div>
-          <div><strong>Status:</strong> ${response.status}</div>
+          <div><strong>Status:</strong> ${response.status || 'Unknown'}</div>
         `;
+        
+        this.logger.error('Test request failed:', response.error);
       }
     } catch (error) {
-      console.error('❌ Test request error:', error);
+      this.logger.error('Error sending test request:', error);
       resultDiv.innerHTML = `<div class="error">❌ Error: ${error.message}</div>`;
+    } finally {
+      sendBtn.disabled = false;
+      sendBtn.textContent = 'Send Test Request';
     }
   }
 
-  async showRules() {
-    console.log('📋 Showing rules...');
+  async refreshLogs() {
     try {
-      const response = await chrome.runtime.sendMessage({
-        action: 'getCustomRules',
-      });
-
-      const rules = response.rules || [];
-      console.log('📋 Custom rules:', rules);
-
-      const rulesInfo = `
-Active Rules: ${rules.length}
-
-Default CORS headers are automatically added when enabled:
-• Access-Control-Allow-Origin: *
-• Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD
-• Access-Control-Allow-Headers: *
-• Access-Control-Allow-Credentials: true
-
-Custom Rules: ${
-        rules.length > 0
-          ? rules.map((rule) => `\n• Rule ID: ${rule.id}`).join('')
-          : 'None'
-      }
-      `;
-
-      alert(rulesInfo);
+      this.logger.info('Refreshing logs...');
+      const response = await this.sendMessage({ action: 'getLogs' });
+      this.displayLogs(response.logs || []);
     } catch (error) {
-      console.error('❌ Error showing rules:', error);
-      alert('Error loading rules information');
+      this.logger.error('Error refreshing logs:', error);
+      this.showError('Failed to refresh logs');
     }
+  }
+
+  displayLogs(logs) {
+    const logsContainer = document.getElementById('logsContainer');
+    
+    if (!logs || logs.length === 0) {
+      logsContainer.innerHTML = '<div class="log-entry">No logs available</div>';
+      return;
+    }
+
+    const logEntries = logs.map(log => {
+      const timestamp = new Date(log.timestamp).toLocaleTimeString();
+      const levelClass = `log-${log.level.toLowerCase()}`;
+      return `
+        <div class="log-entry ${levelClass}">
+          [${timestamp}] [${log.context}] ${log.message}
+        </div>
+      `;
+    }).join('');
+
+    logsContainer.innerHTML = logEntries;
+    
+    // Scroll to bottom
+    logsContainer.scrollTop = logsContainer.scrollHeight;
+    
+    this.logger.debug('Displayed logs:', logs.length);
   }
 
   async clearCache() {
-    console.log('🗑️ Clearing cache...');
     try {
-      // Clear storage
-      await chrome.storage.local.clear();
-      console.log('✅ Cache cleared successfully');
-      alert(
-        'Cache cleared successfully! Extension will reload default settings.'
-      );
+      if (!confirm('Are you sure you want to clear the cache? This will reset all settings.')) {
+        return;
+      }
 
-      // Reload status
-      this.loadStatus();
+      this.logger.info('Clearing cache...');
+      const response = await this.sendMessage({ action: 'clearCache' });
+      
+      if (response.success) {
+        this.showNotification('Cache cleared successfully', 'success');
+        // Reload status after clearing cache
+        setTimeout(() => this.loadStatus(), 500);
+      } else {
+        this.showError('Failed to clear cache');
+      }
     } catch (error) {
-      console.error('❌ Error clearing cache:', error);
-      alert('Error clearing cache');
+      this.logger.error('Error clearing cache:', error);
+      this.showError('Failed to clear cache');
     }
   }
+
+  async sendMessage(message) {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Message timeout'));
+      }, 10000);
+
+      chrome.runtime.sendMessage(message, (response) => {
+        clearTimeout(timeout);
+        
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+        } else if (response && response.error) {
+          reject(new Error(response.error));
+        } else {
+          resolve(response);
+        }
+      });
+    });
+  }
+
+  showNotification(message, type = 'info') {
+    // Create a temporary notification
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      padding: 10px 15px;
+      border-radius: 5px;
+      font-size: 14px;
+      font-weight: 500;
+      z-index: 1000;
+      animation: slideIn 0.3s ease-out;
+    `;
+
+    switch (type) {
+      case 'success':
+        notification.style.background = 'rgba(76, 175, 80, 0.9)';
+        break;
+      case 'error':
+        notification.style.background = 'rgba(244, 67, 54, 0.9)';
+        break;
+      case 'warning':
+        notification.style.background = 'rgba(255, 193, 7, 0.9)';
+        break;
+      default:
+        notification.style.background = 'rgba(33, 150, 243, 0.9)';
+    }
+
+    notification.textContent = message;
+    document.body.appendChild(notification);
+
+    setTimeout(() => {
+      notification.remove();
+    }, 3000);
+  }
+
+  showError(message) {
+    this.showNotification(message, 'error');
+  }
+}
+
+// Simple logger for popup
+class Logger {
+  constructor(context) {
+    this.context = context;
+  }
+
+  log(level, message, ...args) {
+    const timestamp = new Date().toISOString();
+    const formattedMessage = `[${timestamp}] [${this.context}] ${message}`;
+    
+    switch (level) {
+      case 'ERROR':
+        console.error(formattedMessage, ...args);
+        break;
+      case 'WARN':
+        console.warn(formattedMessage, ...args);
+        break;
+      case 'INFO':
+        console.info(formattedMessage, ...args);
+        break;
+      case 'DEBUG':
+        console.debug(formattedMessage, ...args);
+        break;
+      case 'SUCCESS':
+        console.log(`%c${formattedMessage}`, 'color: #4CAF50; font-weight: bold;', ...args);
+        break;
+      default:
+        console.log(formattedMessage, ...args);
+    }
+  }
+
+  error(message, ...args) { this.log('ERROR', message, ...args); }
+  warn(message, ...args) { this.log('WARN', message, ...args); }
+  info(message, ...args) { this.log('INFO', message, ...args); }
+  debug(message, ...args) { this.log('DEBUG', message, ...args); }
+  success(message, ...args) { this.log('SUCCESS', message, ...args); }
 }
 
 // Initialize popup when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('🎬 DOM loaded, initializing popup...');
   new CORSPopup();
 });

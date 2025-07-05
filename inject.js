@@ -1,18 +1,24 @@
-// Injected Script for CORS Bypass Extension
-(function () {
+// Enhanced Injected Script for CORS Bypass Extension
+(function() {
   'use strict';
+
+  // Prevent multiple injections
+  if (window.corsbypassInjected) {
+    return;
+  }
+  window.corsbypassInjected = true;
 
   class CORSBypassInjector {
     constructor() {
       this.pendingRequests = new Map();
       this.requestId = 0;
-      this.requestTimeout = 30000; // 30 seconds timeout
+      this.logger = new Logger('Inject');
       this.init();
     }
 
     init() {
-      console.log('🌐 CORS Bypass Injector initializing...');
-
+      this.logger.info('🎯 Initializing CORS Bypass Injector...');
+      
       // Override fetch API
       this.overrideFetch();
 
@@ -24,143 +30,107 @@
         if (event.source !== window) return;
 
         if (event.data.type === 'CORS_BYPASS_RESPONSE') {
-          console.log('📥 Received bypass response:', event.data);
           this.handleResponse(event.data);
-        } else if (event.data.type === 'CORS_ERROR_DETECTED') {
-          console.log('🚨 CORS error detected:', event.data.message);
         }
       });
 
-      console.log('✅ CORS Bypass Extension injected successfully');
+      this.logger.success('✅ CORS Bypass Extension injected successfully');
     }
 
     overrideFetch() {
-      console.log('🔄 Overriding fetch API...');
       const originalFetch = window.fetch;
       const self = this;
 
-      window.fetch = function (input, init = {}) {
-        // Check if this is a cross-origin request
+      window.fetch = function(input, init = {}) {
         const url = typeof input === 'string' ? input : input.url;
-
+        
         if (self.isCrossOrigin(url)) {
-          console.log('🔄 Bypassing CORS for fetch:', url);
+          self.logger.info('🔄 Bypassing CORS for fetch:', url);
           return self.makeBypassRequest(url, init);
         }
 
-        console.log('📡 Same-origin fetch request:', url);
         // Use original fetch for same-origin requests
         return originalFetch.call(this, input, init);
       };
 
-      console.log('✅ Fetch API override complete');
+      this.logger.debug('Fetch API overridden');
     }
 
     overrideXMLHttpRequest() {
-      console.log('🔄 Overriding XMLHttpRequest...');
       const originalXHR = window.XMLHttpRequest;
       const self = this;
 
-      window.XMLHttpRequest = function () {
+      window.XMLHttpRequest = function() {
         const xhr = new originalXHR();
         const originalOpen = xhr.open;
         const originalSend = xhr.send;
         const originalSetRequestHeader = xhr.setRequestHeader;
 
-        let method,
-          url,
-          headers = {};
+        let method, url, headers = {};
 
-        xhr.open = function (m, u, async, user, password) {
+        xhr.open = function(m, u, async, user, password) {
           method = m;
           url = u;
-          console.log('📡 XHR opened:', method, url);
           return originalOpen.call(this, m, u, async, user, password);
         };
 
-        xhr.setRequestHeader = function (header, value) {
+        xhr.setRequestHeader = function(header, value) {
           headers[header] = value;
-          console.log('📋 XHR header set:', header, value);
           return originalSetRequestHeader.call(this, header, value);
         };
 
-        xhr.send = function (data) {
-          console.log('📤 XHR sending:', method, url);
-
+        xhr.send = function(data) {
           if (self.isCrossOrigin(url)) {
-            console.log('🔄 Bypassing CORS for XHR:', url);
+            self.logger.info('🔄 Bypassing CORS for XHR:', url);
 
             // Use our bypass method
-            self
-              .makeBypassRequest(url, {
-                method: method,
-                headers: headers,
-                body: data,
-              })
-              .then((response) => {
-                console.log('✅ XHR bypass successful:', response.status);
-
-                // Simulate XHR response
-                Object.defineProperty(xhr, 'status', {
-                  value: response.status,
-                  writable: false,
-                });
-                Object.defineProperty(xhr, 'statusText', {
-                  value: response.statusText,
-                  writable: false,
-                });
-                Object.defineProperty(xhr, 'responseText', {
-                  value:
-                    typeof response.data === 'string'
-                      ? response.data
-                      : JSON.stringify(response.data),
-                  writable: false,
-                });
-                Object.defineProperty(xhr, 'response', {
-                  value: response.data,
-                  writable: false,
-                });
-                Object.defineProperty(xhr, 'readyState', {
-                  value: 4,
-                  writable: false,
-                });
-
-                // Trigger events
-                if (xhr.onreadystatechange) {
-                  console.log('🔄 Triggering onreadystatechange');
-                  xhr.onreadystatechange();
-                }
-                if (xhr.onload) {
-                  console.log('✅ Triggering onload');
-                  xhr.onload();
-                }
-              })
-              .catch((error) => {
-                console.error('❌ XHR bypass failed:', error);
-
-                Object.defineProperty(xhr, 'status', {
-                  value: 0,
-                  writable: false,
-                });
-                Object.defineProperty(xhr, 'statusText', {
-                  value: 'Network Error',
-                  writable: false,
-                });
-                Object.defineProperty(xhr, 'readyState', {
-                  value: 4,
-                  writable: false,
-                });
-
-                if (xhr.onerror) {
-                  console.log('❌ Triggering onerror');
-                  xhr.onerror();
-                }
+            self.makeBypassRequest(url, {
+              method: method,
+              headers: headers,
+              body: data
+            }).then(response => {
+              self.logger.debug('XHR bypass response received');
+              
+              // Simulate XHR response
+              Object.defineProperty(xhr, 'status', { value: response.status });
+              Object.defineProperty(xhr, 'statusText', { value: response.statusText });
+              Object.defineProperty(xhr, 'responseText', { 
+                value: typeof response.data === 'string' ? response.data : JSON.stringify(response.data)
               });
+              Object.defineProperty(xhr, 'response', { value: response.data });
+              Object.defineProperty(xhr, 'readyState', { value: 4 });
+
+              // Add response headers
+              const originalGetResponseHeader = xhr.getResponseHeader;
+              const originalGetAllResponseHeaders = xhr.getAllResponseHeaders;
+              
+              xhr.getResponseHeader = function(header) {
+                return response.headers && response.headers[header.toLowerCase()] || null;
+              };
+              
+              xhr.getAllResponseHeaders = function() {
+                if (!response.headers) return '';
+                return Object.entries(response.headers)
+                  .map(([key, value]) => `${key}: ${value}`)
+                  .join('\r\n');
+              };
+
+              // Trigger events
+              if (xhr.onreadystatechange) xhr.onreadystatechange();
+              if (xhr.onload) xhr.onload();
+            }).catch(error => {
+              self.logger.error('XHR bypass error:', error);
+              
+              Object.defineProperty(xhr, 'status', { value: 0 });
+              Object.defineProperty(xhr, 'statusText', { value: 'Network Error' });
+              Object.defineProperty(xhr, 'readyState', { value: 4 });
+
+              if (xhr.onerror) xhr.onerror();
+            });
 
             return;
           }
 
-          console.log('📡 Same-origin XHR request:', url);
           // Use original send for same-origin requests
           return originalSend.call(this, data);
         };
@@ -168,212 +138,230 @@
         return xhr;
       };
 
-      // Copy static properties
-      Object.setPrototypeOf(
-        window.XMLHttpRequest.prototype,
-        originalXHR.prototype
-      );
-      Object.setPrototypeOf(window.XMLHttpRequest, originalXHR);
-
-      console.log('✅ XMLHttpRequest override complete');
+      this.logger.debug('XMLHttpRequest overridden');
     }
 
     async makeBypassRequest(url, options = {}) {
-      console.log('🚀 Making bypass request to:', url);
       const requestId = ++this.requestId;
+      
+      this.logger.debug('Making bypass request:', requestId, url);
 
       return new Promise((resolve, reject) => {
         this.pendingRequests.set(requestId, { resolve, reject });
 
-        console.log('📨 Sending bypass request:', requestId);
-
         // Send request to content script
-        window.postMessage(
-          {
-            type: 'CORS_BYPASS_REQUEST',
-            requestId: requestId,
-            url: url,
-            options: options,
-          },
-          '*'
-        );
+        window.postMessage({
+          type: 'CORS_BYPASS_REQUEST',
+          requestId: requestId,
+          url: url,
+          options: options
+        }, '*');
 
         // Set timeout
         setTimeout(() => {
           if (this.pendingRequests.has(requestId)) {
-            console.log('⏰ Request timeout:', requestId);
             this.pendingRequests.delete(requestId);
+            this.logger.error('Request timeout:', requestId);
             reject(new Error('Request timeout'));
           }
-        }, this.requestTimeout);
+        }, 30000); // 30 second timeout
       });
     }
 
     handleResponse(data) {
-      console.log('📥 Handling response for request:', data.requestId);
-      const pendingRequest = this.pendingRequests.get(data.requestId);
+      const { requestId, response } = data;
+      const pending = this.pendingRequests.get(requestId);
 
-      if (pendingRequest) {
-        console.log('✅ Found pending request:', data.requestId);
-        this.pendingRequests.delete(data.requestId);
+      if (!pending) {
+        this.logger.warn('No pending request for ID:', requestId);
+        return;
+      }
 
-        if (data.response.success) {
-          console.log('✅ Request successful:', data.requestId);
-          // Create a Response object that mimics the fetch Response interface
-          const response = this.createFetchResponse(data.response);
-          pendingRequest.resolve(response);
-        } else {
-          console.error(
-            '❌ Request failed:',
-            data.requestId,
-            data.response.error
-          );
-          pendingRequest.reject(
-            new Error(data.response.error || 'Request failed')
-          );
-        }
+      this.pendingRequests.delete(requestId);
+      this.logger.debug('Handling response for request:', requestId, response.success);
+
+      if (response.success) {
+        // Create a Response-like object for fetch compatibility
+        const mockResponse = {
+          ok: response.status >= 200 && response.status < 300,
+          status: response.status,
+          statusText: response.statusText,
+          headers: this.createHeadersObject(response.headers || {}),
+          data: response.data,
+          url: response.url,
+          redirected: false,
+          type: 'cors',
+          json: () => Promise.resolve(
+            typeof response.data === 'object' ? response.data : JSON.parse(response.data)
+          ),
+          text: () => Promise.resolve(
+            typeof response.data === 'string' ? response.data : JSON.stringify(response.data)
+          ),
+          blob: () => Promise.resolve(new Blob([
+            typeof response.data === 'string' ? response.data : JSON.stringify(response.data)
+          ])),
+          arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+          formData: () => Promise.resolve(new FormData()),
+          clone: () => mockResponse
+        };
+
+        pending.resolve(mockResponse);
       } else {
-        console.warn('⚠️ No pending request found for:', data.requestId);
+        pending.reject(new Error(response.error || 'Request failed'));
       }
     }
 
-    createFetchResponse(responseData) {
-      console.log('🔄 Creating fetch response object');
-
-      // Create a Response-like object
-      const response = {
-        status: responseData.status,
-        statusText: responseData.statusText,
-        ok: responseData.status >= 200 && responseData.status < 300,
-        headers: new Headers(responseData.headers || {}),
-        url: responseData.url,
-        redirected: false,
-        type: 'cors',
-
-        // Response body methods
-        text: async () => {
-          console.log('📄 Converting response to text');
-          return typeof responseData.data === 'string'
-            ? responseData.data
-            : JSON.stringify(responseData.data);
-        },
-
-        json: async () => {
-          console.log('📄 Converting response to JSON');
-          if (typeof responseData.data === 'string') {
-            try {
-              return JSON.parse(responseData.data);
-            } catch (e) {
-              throw new Error('Invalid JSON response');
-            }
-          }
-          return responseData.data;
-        },
-
-        blob: async () => {
-          console.log('📄 Converting response to blob');
-          const text =
-            typeof responseData.data === 'string'
-              ? responseData.data
-              : JSON.stringify(responseData.data);
-          return new Blob([text], { type: 'text/plain' });
-        },
-
-        arrayBuffer: async () => {
-          console.log('📄 Converting response to arrayBuffer');
-          const text =
-            typeof responseData.data === 'string'
-              ? responseData.data
-              : JSON.stringify(responseData.data);
-          return new TextEncoder().encode(text).buffer;
-        },
-
-        formData: async () => {
-          console.log('📄 Converting response to formData');
-          throw new Error('FormData response not supported');
-        },
-
-        // Additional methods
-        clone: () => {
-          console.log('📄 Cloning response');
-          return this.createFetchResponse(responseData);
-        },
+    createHeadersObject(headersObj) {
+      const headers = new Map();
+      
+      Object.entries(headersObj).forEach(([key, value]) => {
+        headers.set(key.toLowerCase(), value);
+      });
+      
+      return {
+        get: (name) => headers.get(name.toLowerCase()),
+        has: (name) => headers.has(name.toLowerCase()),
+        keys: () => headers.keys(),
+        values: () => headers.values(),
+        entries: () => headers.entries(),
+        forEach: (callback) => headers.forEach(callback),
+        [Symbol.iterator]: () => headers.entries()
       };
-
-      // Make the response object non-enumerable for certain properties
-      Object.defineProperty(response, 'body', {
-        value: null,
-        writable: false,
-        enumerable: false,
-      });
-
-      Object.defineProperty(response, 'bodyUsed', {
-        value: false,
-        writable: false,
-        enumerable: false,
-      });
-
-      console.log('✅ Fetch response object created');
-      return response;
     }
 
     isCrossOrigin(url) {
       try {
-        const currentOrigin = window.location.origin;
         const requestUrl = new URL(url, window.location.href);
-        const requestOrigin = requestUrl.origin;
-
-        const isCrossOrigin = currentOrigin !== requestOrigin;
-        console.log(
-          '🔍 Origin check:',
-          currentOrigin,
-          '→',
-          requestOrigin,
-          '=',
-          isCrossOrigin ? 'CROSS-ORIGIN' : 'SAME-ORIGIN'
-        );
-
+        const isCrossOrigin = requestUrl.origin !== window.location.origin;
+        
+        if (isCrossOrigin) {
+          this.logger.debug('Cross-origin request detected:', requestUrl.origin, 'vs', window.location.origin);
+        }
+        
         return isCrossOrigin;
+      } catch (e) {
+        this.logger.error('Error checking cross-origin:', e);
+        return false;
+      }
+    }
+  }
+
+  // Enhanced CORS bypass utilities
+  class CORSUtils {
+    static addCORSHeaders(response) {
+      const headers = response.headers || {};
+      return {
+        ...headers,
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS, PATCH',
+        'Access-Control-Allow-Headers': '*',
+        'Access-Control-Allow-Credentials': 'true',
+        'Access-Control-Expose-Headers': '*'
+      };
+    }
+
+    static createProxyUrl(targetUrl, proxyBase = '') {
+      if (!proxyBase) return targetUrl;
+      return `${proxyBase}${encodeURIComponent(targetUrl)}`;
+    }
+
+    static async testCORS(url) {
+      try {
+        const response = await fetch(url, {
+          method: 'OPTIONS',
+          headers: {
+            'Access-Control-Request-Method': 'GET',
+            'Access-Control-Request-Headers': 'Content-Type'
+          }
+        });
+        return response.ok;
       } catch (error) {
-        console.error('❌ Error checking origin:', error);
-        // If we can't determine, assume it's cross-origin for safety
-        return true;
+        return false;
+      }
+    }
+  }
+
+  // Simple logger for inject script
+  class Logger {
+    constructor(context) {
+      this.context = context;
+    }
+
+    log(level, message, ...args) {
+      const timestamp = new Date().toISOString();
+      const formattedMessage = `[${timestamp}] [${this.context}] ${message}`;
+      
+      switch (level) {
+        case 'ERROR':
+          console.error(formattedMessage, ...args);
+          break;
+        case 'WARN':
+          console.warn(formattedMessage, ...args);
+          break;
+        case 'INFO':
+          console.info(formattedMessage, ...args);
+          break;
+        case 'DEBUG':
+          console.debug(formattedMessage, ...args);
+          break;
+        case 'SUCCESS':
+          console.log(`%c${formattedMessage}`, 'color: #4CAF50; font-weight: bold;', ...args);
+          break;
+        default:
+          console.log(formattedMessage, ...args);
       }
     }
 
-    // Utility method to check if the extension is available
-    isExtensionAvailable() {
-      return typeof window.postMessage === 'function';
-    }
-
-    // Method to handle cleanup
-    cleanup() {
-      console.log('🧹 Cleaning up pending requests...');
-      this.pendingRequests.forEach((request, id) => {
-        console.log('❌ Rejecting pending request:', id);
-        request.reject(new Error('Extension cleanup'));
-      });
-      this.pendingRequests.clear();
-      console.log('✅ Cleanup complete');
-    }
+    error(message, ...args) { this.log('ERROR', message, ...args); }
+    warn(message, ...args) { this.log('WARN', message, ...args); }
+    info(message, ...args) { this.log('INFO', message, ...args); }
+    debug(message, ...args) { this.log('DEBUG', message, ...args); }
+    success(message, ...args) { this.log('SUCCESS', message, ...args); }
   }
+
+  // Global API for external usage
+  window.CORSBypass = {
+    isActive: true,
+    version: '1.0.0',
+
+    async fetch(url, options = {}) {
+      const injector = new CORSBypassInjector();
+      return injector.makeBypassRequest(url, options);
+    },
+
+    async testURL(url) {
+      return CORSUtils.testCORS(url);
+    },
+
+    createProxy(url, proxy) {
+      return CORSUtils.createProxyUrl(url, proxy);
+    },
+
+    addHeaders(response) {
+      return CORSUtils.addCORSHeaders(response);
+    },
+
+    getStats() {
+      return {
+        version: this.version,
+        isActive: this.isActive,
+        features: ['fetch', 'xhr', 'proxy', 'logging']
+      };
+    }
+  };
 
   // Initialize the injector
-  const corsInjector = new CORSBypassInjector();
+  const injector = new CORSBypassInjector();
 
-  // Handle page unload
-  window.addEventListener('beforeunload', () => {
-    console.log('📴 Page unloading, cleaning up...');
-    corsInjector.cleanup();
-  });
+  // Notify that extension is ready
+  window.dispatchEvent(new CustomEvent('corsbypass:ready', {
+    detail: {
+      version: '1.0.0',
+      features: ['fetch', 'xhr', 'proxy', 'logging'],
+      injector: injector
+    }
+  }));
 
-  // Expose injector for debugging (optional)
-  if (typeof window !== 'undefined' && window.console) {
-    window.corsInjector = corsInjector;
-    console.log(
-      '🔧 CORS Injector exposed as window.corsInjector for debugging'
-    );
-  }
-
-  console.log('🎯 CORS Bypass Injection complete');
+  // Add some global utilities
+  window.corsbypass = window.CORSBypass;
 })();

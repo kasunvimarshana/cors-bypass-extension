@@ -1,272 +1,388 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CORS Bypass Extension</title>
-    <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CORS Bypass Extension</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
-      body {
-        width: 350px;
-        min-height: 400px;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-          Oxygen, Ubuntu, Cantarell, sans-serif;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-      }
+    body {
+      width: 380px;
+      min-height: 500px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      overflow-x: hidden;
+    }
 
-      .container {
-        padding: 20px;
-      }
+    .container {
+      padding: 20px;
+    }
 
-      .header {
-        text-align: center;
-        margin-bottom: 25px;
-      }
+    .header {
+      text-align: center;
+      margin-bottom: 25px;
+    }
 
-      .header h1 {
-        font-size: 24px;
-        font-weight: 600;
-        margin-bottom: 5px;
-        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-      }
+    .header h1 {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 5px;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    }
 
-      .header p {
-        font-size: 14px;
-        opacity: 0.8;
-      }
+    .header p {
+      font-size: 14px;
+      opacity: 0.8;
+    }
 
-      .status-card {
-        background: rgba(255, 255, 255, 0.1);
-        border-radius: 15px;
-        padding: 20px;
-        margin-bottom: 20px;
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-      }
+    .status-card {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 15px;
+      padding: 20px;
+      margin-bottom: 20px;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      transition: all 0.3s ease;
+    }
 
-      .status-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 15px;
-      }
+    .status-card.active {
+      background: rgba(76, 175, 80, 0.2);
+      border-color: rgba(76, 175, 80, 0.3);
+    }
 
-      .status-indicator {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
+    .status-card.inactive {
+      background: rgba(244, 67, 54, 0.2);
+      border-color: rgba(244, 67, 54, 0.3);
+    }
 
-      .status-dot {
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        animation: pulse 2s infinite;
-      }
+    .status-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+    }
 
-      .status-dot.active {
-        background: #4caf50;
-      }
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
 
-      .status-dot.inactive {
-        background: #f44336;
-      }
+    .status-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
 
-      @keyframes pulse {
-        0% {
-          opacity: 1;
-        }
-        50% {
-          opacity: 0.5;
-        }
-        100% {
-          opacity: 1;
-        }
-      }
+    .status-dot.active {
+      background: #4caf50;
+      box-shadow: 0 0 10px rgba(76, 175, 80, 0.5);
+    }
 
-      .toggle-btn {
-        background: rgba(255, 255, 255, 0.2);
-        border: none;
-        border-radius: 25px;
-        padding: 8px 16px;
-        color: white;
-        font-size: 12px;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        backdrop-filter: blur(5px);
-      }
+    .status-dot.inactive {
+      background: #f44336;
+      box-shadow: 0 0 10px rgba(244, 67, 54, 0.5);
+    }
 
-      .toggle-btn:hover {
-        background: rgba(255, 255, 255, 0.3);
-        transform: scale(1.05);
-      }
+    @keyframes pulse {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.7; transform: scale(1.1); }
+      100% { opacity: 1; transform: scale(1); }
+    }
 
-      .toggle-btn.active {
-        background: rgba(76, 175, 80, 0.3);
-      }
+    .toggle-btn {
+      background: rgba(255, 255, 255, 0.2);
+      border: none;
+      border-radius: 25px;
+      padding: 8px 16px;
+      color: white;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      backdrop-filter: blur(5px);
+      min-width: 80px;
+    }
 
-      .toggle-btn.inactive {
-        background: rgba(244, 67, 54, 0.3);
-      }
+    .toggle-btn:hover {
+      background: rgba(255, 255, 255, 0.3);
+      transform: scale(1.05);
+    }
 
-      .features {
-        display: grid;
-        gap: 10px;
-        margin-bottom: 20px;
-      }
+    .toggle-btn:active {
+      transform: scale(0.95);
+    }
 
-      .feature-item {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 10px;
-        background: rgba(255, 255, 255, 0.1);
-        border-radius: 8px;
-        font-size: 14px;
-      }
+    .toggle-btn.active {
+      background: rgba(76, 175, 80, 0.3);
+      border: 1px solid rgba(76, 175, 80, 0.5);
+    }
 
-      .feature-icon {
-        width: 20px;
-        height: 20px;
-        opacity: 0.8;
-      }
+    .toggle-btn.inactive {
+      background: rgba(244, 67, 54, 0.3);
+      border: 1px solid rgba(244, 67, 54, 0.5);
+    }
 
-      .actions {
-        display: grid;
-        gap: 10px;
-      }
+    .toggle-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
 
-      .action-btn {
-        background: rgba(255, 255, 255, 0.2);
-        border: none;
-        border-radius: 10px;
-        padding: 12px 16px;
-        color: white;
-        font-size: 14px;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        backdrop-filter: blur(5px);
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
+    .features {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
 
-      .action-btn:hover {
-        background: rgba(255, 255, 255, 0.3);
-        transform: translateY(-2px);
-      }
+    .feature-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      font-size: 14px;
+      transition: all 0.3s ease;
+    }
 
-      .action-btn:active {
-        transform: translateY(0);
-      }
+    .feature-item:hover {
+      background: rgba(255, 255, 255, 0.15);
+      transform: translateY(-1px);
+    }
 
-      .test-section {
-        margin-top: 20px;
-        padding: 15px;
-        background: rgba(255, 255, 255, 0.1);
-        border-radius: 10px;
-      }
+    .feature-icon {
+      font-size: 18px;
+    }
 
-      .test-input {
-        width: 100%;
-        padding: 8px 12px;
-        margin-bottom: 10px;
-        border: 1px solid rgba(255, 255, 255, 0.3);
-        border-radius: 6px;
-        background: rgba(255, 255, 255, 0.1);
-        color: white;
-        font-size: 14px;
-      }
+    .actions {
+      display: grid;
+      gap: 10px;
+    }
 
-      .test-input::placeholder {
-        color: rgba(255, 255, 255, 0.7);
-      }
+    .action-btn {
+      background: rgba(255, 255, 255, 0.2);
+      border: none;
+      border-radius: 10px;
+      padding: 12px 16px;
+      color: white;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      backdrop-filter: blur(5px);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
 
-      .test-result {
-        max-height: 100px;
-        overflow-y: auto;
-        padding: 8px;
-        background: rgba(0, 0, 0, 0.2);
-        border-radius: 6px;
-        font-size: 12px;
-        font-family: monospace;
-        margin-top: 10px;
-      }
+    .action-btn:hover {
+      background: rgba(255, 255, 255, 0.3);
+      transform: translateY(-2px);
+    }
 
-      .hidden {
-        display: none;
-      }
+    .action-btn:active {
+      transform: translateY(0);
+    }
 
-      .success {
-        color: #4caf50;
-      }
+    .test-section {
+      margin-top: 20px;
+      padding: 15px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      backdrop-filter: blur(10px);
+    }
 
-      .error {
-        color: #f44336;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <div class="header">
-        <h1>CORS Bypass</h1>
-        <p>Development Tool</p>
-      </div>
+    .test-section h3 {
+      margin-bottom: 10px;
+      font-size: 16px;
+    }
 
-      <div class="status-card">
-        <div class="status-header">
-          <div class="status-indicator">
-            <div class="status-dot" id="statusDot"></div>
-            <span id="statusText">Loading...</span>
-          </div>
-          <button class="toggle-btn" id="toggleBtn">Toggle</button>
+    .test-input {
+      width: 100%;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+      font-size: 14px;
+      backdrop-filter: blur(5px);
+    }
+
+    .test-input::placeholder {
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    .test-input:focus {
+      outline: none;
+      border-color: rgba(255, 255, 255, 0.5);
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .test-result {
+      max-height: 120px;
+      overflow-y: auto;
+      padding: 10px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 8px;
+      font-size: 12px;
+      font-family: 'Courier New', monospace;
+      margin-top: 10px;
+      line-height: 1.4;
+    }
+
+    .test-result:empty {
+      display: none;
+    }
+
+    .logs-section {
+      margin-top: 20px;
+      padding: 15px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      backdrop-filter: blur(10px);
+    }
+
+    .logs-section h3 {
+      margin-bottom: 10px;
+      font-size: 16px;
+    }
+
+    .logs-container {
+      max-height: 150px;
+      overflow-y: auto;
+      padding: 10px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 8px;
+      font-size: 11px;
+      font-family: 'Courier New', monospace;
+      line-height: 1.3;
+    }
+
+    .log-entry {
+      margin-bottom: 2px;
+      padding: 2px 4px;
+      border-radius: 3px;
+    }
+
+    .log-error { background: rgba(244, 67, 54, 0.2); }
+    .log-warn { background: rgba(255, 193, 7, 0.2); }
+    .log-info { background: rgba(33, 150, 243, 0.2); }
+    .log-success { background: rgba(76, 175, 80, 0.2); }
+    .log-debug { background: rgba(158, 158, 158, 0.2); }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .success {
+      color: #4caf50;
+    }
+
+    .error {
+      color: #f44336;
+    }
+
+    .warning {
+      color: #ff9800;
+    }
+
+    .loading {
+      color: #2196f3;
+    }
+
+    .fade-in {
+      animation: fadeIn 0.3s ease-in;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .status-text {
+      font-weight: 500;
+      font-size: 14px;
+    }
+
+    .version {
+      text-align: center;
+      font-size: 12px;
+      opacity: 0.7;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>CORS Bypass</h1>
+      <p>Development Extension</p>
+    </div>
+
+    <div class="status-card" id="statusCard">
+      <div class="status-header">
+        <div class="status-indicator">
+          <div class="status-dot" id="statusDot"></div>
+          <span class="status-text" id="statusText">Loading...</span>
         </div>
+        <button class="toggle-btn" id="toggleBtn" disabled>Toggle</button>
+      </div>
 
-        <div class="features">
-          <div class="feature-item">
-            <span class="feature-icon">🌐</span>
-            <span>Bypass CORS restrictions</span>
-          </div>
-          <div class="feature-item">
-            <span class="feature-icon">🔓</span>
-            <span>Allow all origins</span>
-          </div>
-          <div class="feature-item">
-            <span class="feature-icon">⚡</span>
-            <span>Real-time header modification</span>
-          </div>
-          <div class="feature-item">
-            <span class="feature-icon">🛡️</span>
-            <span>Custom rules support</span>
-          </div>
+      <div class="features">
+        <div class="feature-item">
+          <span class="feature-icon">🌐</span>
+          <span>Bypass CORS restrictions</span>
         </div>
-      </div>
-
-      <div class="actions">
-        <button class="action-btn" id="testBtn">🧪 Test CORS Request</button>
-        <button class="action-btn" id="rulesBtn">⚙️ View Rules</button>
-        <button class="action-btn" id="clearBtn">🗑️ Clear Cache</button>
-      </div>
-
-      <div class="test-section" id="testSection">
-        <h3 style="margin-bottom: 10px">Test Request</h3>
-        <input
-          type="text"
-          class="test-input"
-          id="testUrl"
-          placeholder="Enter URL to test (e.g., https://api.example.com)"
-        />
-        <button class="action-btn" id="sendTestBtn">Send Test Request</button>
-        <div class="test-result" id="testResult"></div>
+        <div class="feature-item">
+          <span class="feature-icon">🔓</span>
+          <span>Allow all origins</span>
+        </div>
+        <div class="feature-item">
+          <span class="feature-icon">⚡</span>
+          <span>Real-time header modification</span>
+        </div>
+        <div class="feature-item">
+          <span class="feature-icon">🛡️</span>
+          <span>Custom rules support</span>
+        </div>
       </div>
     </div>
 
-    <script src="popup.js"></script>
-  </body>
+    <div class="actions">
+      <button class="action-btn" id="testBtn">🧪 Test CORS Request</button>
+      <button class="action-btn" id="logsBtn">📋 View Logs</button>
+      <button class="action-btn" id="clearBtn">🗑️ Clear Cache</button>
+    </div>
+
+    <div class="test-section hidden" id="testSection">
+      <h3>Test CORS Request</h3>
+      <input
+        type="text"
+        class="test-input"
+        id="testUrl"
+        placeholder="Enter URL to test (e.g., https://api.example.com)"
+        value="https://jsonplaceholder.typicode.com/posts/1"
+      />
+      <button class="action-btn" id="sendTestBtn">Send Test Request</button>
+      <div class="test-result" id="testResult"></div>
+    </div>
+
+    <div class="logs-section hidden" id="logsSection">
+      <h3>Extension Logs</h3>
+      <div class="logs-container" id="logsContainer"></div>
+      <button class="action-btn" id="refreshLogsBtn" style="margin-top: 10px;">🔄 Refresh Logs</button>
+    </div>
+
+    <div class="version">v1.0.0</div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
 </html>

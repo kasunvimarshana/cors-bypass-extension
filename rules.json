@@ -13,12 +13,12 @@
         {
           "header": "Access-Control-Allow-Methods",
           "operation": "set",
-          "value": "GET, POST, PUT, DELETE, OPTIONS, PATCH"
+          "value": "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD"
         },
         {
           "header": "Access-Control-Allow-Headers",
           "operation": "set",
-          "value": "Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control, Pragma, X-Auth-Token"
+          "value": "*"
         },
         {
           "header": "Access-Control-Allow-Credentials",
@@ -61,9 +61,12 @@
       "type": "modifyHeaders",
       "requestHeaders": [
         {
-          "header": "Access-Control-Request-Headers",
-          "operation": "set",
-          "value": "*"
+          "header": "Origin",
+          "operation": "remove"
+        },
+        {
+          "header": "Referer",
+          "operation": "remove"
         }
       ]
     },
