@@ -6,10 +6,13 @@
     constructor() {
       this.pendingRequests = new Map();
       this.requestId = 0;
+      this.requestTimeout = 30000; // 30 seconds timeout
       this.init();
     }
 
     init() {
+      console.log('🌐 CORS Bypass Injector initializing...');
+
       // Override fetch API
       this.overrideFetch();
 
@@ -21,14 +24,18 @@
         if (event.source !== window) return;
 
         if (event.data.type === 'CORS_BYPASS_RESPONSE') {
+          console.log('📥 Received bypass response:', event.data);
           this.handleResponse(event.data);
+        } else if (event.data.type === 'CORS_ERROR_DETECTED') {
+          console.log('🚨 CORS error detected:', event.data.message);
         }
       });
 
-      console.log('🌐 CORS Bypass Extension injected successfully');
+      console.log('✅ CORS Bypass Extension injected successfully');
     }
 
     overrideFetch() {
+      console.log('🔄 Overriding fetch API...');
       const originalFetch = window.fetch;
       const self = this;
 
@@ -41,12 +48,16 @@
           return self.makeBypassRequest(url, init);
         }
 
+        console.log('📡 Same-origin fetch request:', url);
         // Use original fetch for same-origin requests
         return originalFetch.call(this, input, init);
       };
+
+      console.log('✅ Fetch API override complete');
     }
 
     overrideXMLHttpRequest() {
+      console.log('🔄 Overriding XMLHttpRequest...');
       const originalXHR = window.XMLHttpRequest;
       const self = this;
 
@@ -63,15 +74,19 @@
         xhr.open = function (m, u, async, user, password) {
           method = m;
           url = u;
+          console.log('📡 XHR opened:', method, url);
           return originalOpen.call(this, m, u, async, user, password);
         };
 
         xhr.setRequestHeader = function (header, value) {
           headers[header] = value;
+          console.log('📋 XHR header set:', header, value);
           return originalSetRequestHeader.call(this, header, value);
         };
 
         xhr.send = function (data) {
+          console.log('📤 XHR sending:', method, url);
+
           if (self.isCrossOrigin(url)) {
             console.log('🔄 Bypassing CORS for XHR:', url);
 
@@ -83,54 +98,94 @@
                 body: data,
               })
               .then((response) => {
+                console.log('✅ XHR bypass successful:', response.status);
+
                 // Simulate XHR response
                 Object.defineProperty(xhr, 'status', {
                   value: response.status,
+                  writable: false,
                 });
                 Object.defineProperty(xhr, 'statusText', {
                   value: response.statusText,
+                  writable: false,
                 });
                 Object.defineProperty(xhr, 'responseText', {
                   value:
                     typeof response.data === 'string'
                       ? response.data
                       : JSON.stringify(response.data),
+                  writable: false,
                 });
                 Object.defineProperty(xhr, 'response', {
                   value: response.data,
+                  writable: false,
                 });
-                Object.defineProperty(xhr, 'readyState', { value: 4 });
+                Object.defineProperty(xhr, 'readyState', {
+                  value: 4,
+                  writable: false,
+                });
 
                 // Trigger events
-                if (xhr.onreadystatechange) xhr.onreadystatechange();
-                if (xhr.onload) xhr.onload();
+                if (xhr.onreadystatechange) {
+                  console.log('🔄 Triggering onreadystatechange');
+                  xhr.onreadystatechange();
+                }
+                if (xhr.onload) {
+                  console.log('✅ Triggering onload');
+                  xhr.onload();
+                }
               })
               .catch((error) => {
-                Object.defineProperty(xhr, 'status', { value: 0 });
+                console.error('❌ XHR bypass failed:', error);
+
+                Object.defineProperty(xhr, 'status', {
+                  value: 0,
+                  writable: false,
+                });
                 Object.defineProperty(xhr, 'statusText', {
                   value: 'Network Error',
+                  writable: false,
                 });
-                Object.defineProperty(xhr, 'readyState', { value: 4 });
+                Object.defineProperty(xhr, 'readyState', {
+                  value: 4,
+                  writable: false,
+                });
 
-                if (xhr.onerror) xhr.onerror();
+                if (xhr.onerror) {
+                  console.log('❌ Triggering onerror');
+                  xhr.onerror();
+                }
               });
 
             return;
           }
 
+          console.log('📡 Same-origin XHR request:', url);
           // Use original send for same-origin requests
           return originalSend.call(this, data);
         };
 
         return xhr;
       };
+
+      // Copy static properties
+      Object.setPrototypeOf(
+        window.XMLHttpRequest.prototype,
+        originalXHR.prototype
+      );
+      Object.setPrototypeOf(window.XMLHttpRequest, originalXHR);
+
+      console.log('✅ XMLHttpRequest override complete');
     }
 
     async makeBypassRequest(url, options = {}) {
+      console.log('🚀 Making bypass request to:', url);
       const requestId = ++this.requestId;
 
       return new Promise((resolve, reject) => {
         this.pendingRequests.set(requestId, { resolve, reject });
+
+        console.log('📨 Sending bypass request:', requestId);
 
         // Send request to content script
         window.postMessage(
@@ -146,134 +201,179 @@
         // Set timeout
         setTimeout(() => {
           if (this.pendingRequests.has(requestId)) {
+            console.log('⏰ Request timeout:', requestId);
             this.pendingRequests.delete(requestId);
             reject(new Error('Request timeout'));
           }
-        }, 30000); // 30 second timeout
+        }, this.requestTimeout);
       });
     }
 
     handleResponse(data) {
-      const { requestId, response } = data;
-      const pending = this.pendingRequests.get(requestId);
+      console.log('📥 Handling response for request:', data.requestId);
+      const pendingRequest = this.pendingRequests.get(data.requestId);
 
-      if (!pending) return;
+      if (pendingRequest) {
+        console.log('✅ Found pending request:', data.requestId);
+        this.pendingRequests.delete(data.requestId);
 
-      this.pendingRequests.delete(requestId);
-
-      if (response.success) {
-        // Create a Response-like object for fetch compatibility
-        const mockResponse = {
-          ok: response.status >= 200 && response.status < 300,
-          status: response.status,
-          statusText: response.statusText,
-          headers: new Map(Object.entries(response.headers || {})),
-          data: response.data,
-          json: () =>
-            Promise.resolve(
-              typeof response.data === 'object'
-                ? response.data
-                : JSON.parse(response.data)
-            ),
-          text: () =>
-            Promise.resolve(
-              typeof response.data === 'string'
-                ? response.data
-                : JSON.stringify(response.data)
-            ),
-          blob: () =>
-            Promise.resolve(
-              new Blob([
-                typeof response.data === 'string'
-                  ? response.data
-                  : JSON.stringify(response.data),
-              ])
-            ),
-          arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
-          clone: () => mockResponse,
-        };
-
-        pending.resolve(mockResponse);
+        if (data.response.success) {
+          console.log('✅ Request successful:', data.requestId);
+          // Create a Response object that mimics the fetch Response interface
+          const response = this.createFetchResponse(data.response);
+          pendingRequest.resolve(response);
+        } else {
+          console.error(
+            '❌ Request failed:',
+            data.requestId,
+            data.response.error
+          );
+          pendingRequest.reject(
+            new Error(data.response.error || 'Request failed')
+          );
+        }
       } else {
-        pending.reject(new Error(response.error || 'Request failed'));
+        console.warn('⚠️ No pending request found for:', data.requestId);
       }
+    }
+
+    createFetchResponse(responseData) {
+      console.log('🔄 Creating fetch response object');
+
+      // Create a Response-like object
+      const response = {
+        status: responseData.status,
+        statusText: responseData.statusText,
+        ok: responseData.status >= 200 && responseData.status < 300,
+        headers: new Headers(responseData.headers || {}),
+        url: responseData.url,
+        redirected: false,
+        type: 'cors',
+
+        // Response body methods
+        text: async () => {
+          console.log('📄 Converting response to text');
+          return typeof responseData.data === 'string'
+            ? responseData.data
+            : JSON.stringify(responseData.data);
+        },
+
+        json: async () => {
+          console.log('📄 Converting response to JSON');
+          if (typeof responseData.data === 'string') {
+            try {
+              return JSON.parse(responseData.data);
+            } catch (e) {
+              throw new Error('Invalid JSON response');
+            }
+          }
+          return responseData.data;
+        },
+
+        blob: async () => {
+          console.log('📄 Converting response to blob');
+          const text =
+            typeof responseData.data === 'string'
+              ? responseData.data
+              : JSON.stringify(responseData.data);
+          return new Blob([text], { type: 'text/plain' });
+        },
+
+        arrayBuffer: async () => {
+          console.log('📄 Converting response to arrayBuffer');
+          const text =
+            typeof responseData.data === 'string'
+              ? responseData.data
+              : JSON.stringify(responseData.data);
+          return new TextEncoder().encode(text).buffer;
+        },
+
+        formData: async () => {
+          console.log('📄 Converting response to formData');
+          throw new Error('FormData response not supported');
+        },
+
+        // Additional methods
+        clone: () => {
+          console.log('📄 Cloning response');
+          return this.createFetchResponse(responseData);
+        },
+      };
+
+      // Make the response object non-enumerable for certain properties
+      Object.defineProperty(response, 'body', {
+        value: null,
+        writable: false,
+        enumerable: false,
+      });
+
+      Object.defineProperty(response, 'bodyUsed', {
+        value: false,
+        writable: false,
+        enumerable: false,
+      });
+
+      console.log('✅ Fetch response object created');
+      return response;
     }
 
     isCrossOrigin(url) {
       try {
+        const currentOrigin = window.location.origin;
         const requestUrl = new URL(url, window.location.href);
-        return requestUrl.origin !== window.location.origin;
-      } catch (e) {
-        return false;
-      }
-    }
-  }
+        const requestOrigin = requestUrl.origin;
 
-  // Advanced CORS bypass utilities
-  class CORSUtils {
-    static addCORSHeaders(response) {
-      const headers = response.headers || {};
-      return {
-        ...headers,
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods':
-          'GET, POST, PUT, DELETE, OPTIONS, PATCH',
-        'Access-Control-Allow-Headers': '*',
-        'Access-Control-Allow-Credentials': 'true',
-        'Access-Control-Expose-Headers': '*',
-      };
-    }
+        const isCrossOrigin = currentOrigin !== requestOrigin;
+        console.log(
+          '🔍 Origin check:',
+          currentOrigin,
+          '→',
+          requestOrigin,
+          '=',
+          isCrossOrigin ? 'CROSS-ORIGIN' : 'SAME-ORIGIN'
+        );
 
-    static createProxyUrl(targetUrl, proxyBase = '') {
-      if (!proxyBase) return targetUrl;
-      return `${proxyBase}${encodeURIComponent(targetUrl)}`;
-    }
-
-    static async testCORS(url) {
-      try {
-        const response = await fetch(url, {
-          method: 'OPTIONS',
-          headers: {
-            'Access-Control-Request-Method': 'GET',
-            'Access-Control-Request-Headers': 'Content-Type',
-          },
-        });
-        return response.ok;
+        return isCrossOrigin;
       } catch (error) {
-        return false;
+        console.error('❌ Error checking origin:', error);
+        // If we can't determine, assume it's cross-origin for safety
+        return true;
       }
     }
+
+    // Utility method to check if the extension is available
+    isExtensionAvailable() {
+      return typeof window.postMessage === 'function';
+    }
+
+    // Method to handle cleanup
+    cleanup() {
+      console.log('🧹 Cleaning up pending requests...');
+      this.pendingRequests.forEach((request, id) => {
+        console.log('❌ Rejecting pending request:', id);
+        request.reject(new Error('Extension cleanup'));
+      });
+      this.pendingRequests.clear();
+      console.log('✅ Cleanup complete');
+    }
   }
-
-  // Global API for external usage
-  window.CORSBypass = {
-    isActive: true,
-
-    async fetch(url, options = {}) {
-      const injector = new CORSBypassInjector();
-      return injector.makeBypassRequest(url, options);
-    },
-
-    async testURL(url) {
-      return CORSUtils.testCORS(url);
-    },
-
-    createProxy(url, proxy) {
-      return CORSUtils.createProxyUrl(url, proxy);
-    },
-
-    addHeaders(response) {
-      return CORSUtils.addCORSHeaders(response);
-    },
-  };
 
   // Initialize the injector
-  new CORSBypassInjector();
+  const corsInjector = new CORSBypassInjector();
 
-  // Notify that extension is ready
-  window.dispatchEvent(
-    new CustomEvent('corsbypass:ready', {
-      detail: { version: '1.0.0', features: ['fetch', 'xhr', 'proxy'] },
-    })
-  );
+  // Handle page unload
+  window.addEventListener('beforeunload', () => {
+    console.log('📴 Page unloading, cleaning up...');
+    corsInjector.cleanup();
+  });
+
+  // Expose injector for debugging (optional)
+  if (typeof window !== 'undefined' && window.console) {
+    window.corsInjector = corsInjector;
+    console.log(
+      '🔧 CORS Injector exposed as window.corsInjector for debugging'
+    );
+  }
+
+  console.log('🎯 CORS Bypass Injection complete');
 })();
