@@ -1,99 +1,141 @@
-document.addEventListener('DOMContentLoaded', () => {
-  const toggle = document.getElementById('toggleEnabled');
-  const statusText = document.getElementById('statusText');
-  const modeIndicator = document.getElementById('modeIndicator');
-  const quickOriginMode = document.getElementById('quickOriginMode');
-  const quickCredentials = document.getElementById('quickCredentials');
-  const optionsButton = document.getElementById('optionsButton');
-  const refreshButton = document.getElementById('refreshButton');
-  const domainCount = document.getElementById('domainCount');
+class CORSPopup {
+  constructor() {
+    this.init();
+  }
 
-  // Load current settings
-  loadSettings();
+  init() {
+    this.bindEvents();
+    this.loadStatus();
+  }
 
-  // Event listeners
-  toggle.addEventListener('change', updateEnabled);
-  quickOriginMode.addEventListener('change', updateQuickSettings);
-  quickCredentials.addEventListener('change', updateQuickSettings);
-  optionsButton.addEventListener('click', openOptions);
-  refreshButton.addEventListener('click', refreshCurrentTab);
+  bindEvents() {
+    document
+      .getElementById('toggleBtn')
+      .addEventListener('click', () => this.toggleExtension());
+    document
+      .getElementById('testBtn')
+      .addEventListener('click', () => this.toggleTestSection());
+    document
+      .getElementById('sendTestBtn')
+      .addEventListener('click', () => this.sendTestRequest());
+    document
+      .getElementById('rulesBtn')
+      .addEventListener('click', () => this.showRules());
+    document
+      .getElementById('clearBtn')
+      .addEventListener('click', () => this.clearCache());
+  }
 
-  async function loadSettings() {
+  async loadStatus() {
     try {
-      const data = await chrome.storage.sync.get('corsSettings');
-      const settings = data.corsSettings || {};
-
-      const enabled = settings.enabled ?? true;
-      toggle.checked = enabled;
-      updateStatusDisplay(enabled);
-
-      quickOriginMode.value = settings.allowOrigin || 'request_origin';
-      quickCredentials.checked = settings.allowCredentials ?? true;
-
-      const domains = settings.domains || ['*'];
-      domainCount.textContent =
-        domains.length === 1 && domains[0] === '*'
-          ? 'All'
-          : domains.length.toString();
+      const response = await chrome.runtime.sendMessage({
+        action: 'getStatus',
+      });
+      this.updateUI(response.enabled);
     } catch (error) {
-      console.error('Error loading settings:', error);
+      console.error('Error loading status:', error);
     }
   }
 
-  async function updateEnabled() {
+  async toggleExtension() {
     try {
-      const enabled = toggle.checked;
-      updateStatusDisplay(enabled);
-
-      const data = await chrome.storage.sync.get('corsSettings');
-      const settings = data.corsSettings || {};
-      await chrome.storage.sync.set({
-        corsSettings: { ...settings, enabled },
+      const response = await chrome.runtime.sendMessage({
+        action: 'toggle',
       });
+      this.updateUI(response.enabled);
     } catch (error) {
-      console.error('Error updating enabled state:', error);
+      console.error('Error toggling extension:', error);
     }
   }
 
-  async function updateQuickSettings() {
-    try {
-      const data = await chrome.storage.sync.get('corsSettings');
-      const settings = data.corsSettings || {};
-      await chrome.storage.sync.set({
-        corsSettings: {
-          ...settings,
-          allowOrigin: quickOriginMode.value,
-          allowCredentials: quickCredentials.checked,
-        },
-      });
-    } catch (error) {
-      console.error('Error updating quick settings:', error);
+  updateUI(enabled) {
+    const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+    const toggleBtn = document.getElementById('toggleBtn');
+
+    if (enabled) {
+      statusDot.className = 'status-dot active';
+      statusText.textContent = 'CORS Bypass Active';
+      toggleBtn.textContent = 'Disable';
+      toggleBtn.className = 'toggle-btn active';
+    } else {
+      statusDot.className = 'status-dot inactive';
+      statusText.textContent = 'CORS Bypass Disabled';
+      toggleBtn.textContent = 'Enable';
+      toggleBtn.className = 'toggle-btn inactive';
     }
   }
 
-  function updateStatusDisplay(enabled) {
-    statusText.textContent = enabled ? 'Enabled' : 'Disabled';
-    statusText.className = enabled ? 'status-enabled' : 'status-disabled';
-    modeIndicator.textContent = enabled ? 'Active (MV3)' : 'Inactive';
-    modeIndicator.className = enabled ? 'mode-active' : 'mode-inactive';
+  toggleTestSection() {
+    const testSection = document.getElementById('testSection');
+    testSection.classList.toggle('hidden');
   }
 
-  function openOptions() {
-    chrome.runtime.openOptionsPage();
-  }
+  async sendTestRequest() {
+    const url = document.getElementById('testUrl').value.trim();
+    const resultDiv = document.getElementById('testResult');
 
-  async function refreshCurrentTab() {
+    if (!url) {
+      resultDiv.innerHTML = '<div class="error">Please enter a URL</div>';
+      return;
+    }
+
+    resultDiv.innerHTML = 'Testing...';
+
     try {
-      const [tab] = await chrome.tabs.query({
-        active: true,
-        currentWindow: true,
+      const response = await chrome.runtime.sendMessage({
+        action: 'makeRequest',
+        url: url,
+        options: { method: 'GET' },
       });
-      if (tab) {
-        await chrome.tabs.reload(tab.id);
-        window.close();
+
+      if (response.success) {
+        resultDiv.innerHTML = `
+                            <div class="success">✅ Success!</div>
+                            <div>Status: ${response.status}</div>
+                            <div>Response: ${JSON.stringify(
+                              response.data
+                            ).substring(0, 200)}...</div>
+                        `;
+      } else {
+        resultDiv.innerHTML = `
+                            <div class="error">❌ Failed</div>
+                            <div>Error: ${response.error}</div>
+                        `;
       }
     } catch (error) {
-      console.error('Error refreshing tab:', error);
+      resultDiv.innerHTML = `<div class="error">❌ Error: ${error.message}</div>`;
     }
   }
+
+  async showRules() {
+    try {
+      const response = await chrome.runtime.sendMessage({
+        action: 'getCustomRules',
+      });
+      const rules = response.rules || [];
+
+      alert(
+        `Active Rules: ${rules.length}\n\nDefault CORS headers are automatically added when enabled.`
+      );
+    } catch (error) {
+      console.error('Error showing rules:', error);
+    }
+  }
+
+  async clearCache() {
+    try {
+      // Clear storage
+      await chrome.storage.local.clear();
+      alert('Cache cleared successfully!');
+    } catch (error) {
+      console.error('Error clearing cache:', error);
+      alert('Error clearing cache');
+    }
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  // Initialize popup
+  new CORSPopup();
 });

@@ -1,217 +1,289 @@
-const DEFAULT_SETTINGS = {
-  enabled: true,
-  allowOrigin: 'request_origin',
-  customOrigin: '',
-  allowMethods: 'GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD',
-  allowHeaders: '*',
-  allowCredentials: true,
-  domains: ['*'],
-  removeExisting: true,
-  logRequests: false,
-};
-
-let settings = { ...DEFAULT_SETTINGS };
-
-// Initialize extension
-chrome.runtime.onInstalled.addListener(async () => {
-  // Load settings
-  const data = await chrome.storage.sync.get('corsSettings');
-  if (!data?.corsSettings) {
-    await chrome.storage.sync.set({ corsSettings: DEFAULT_SETTINGS });
+// Service Worker for CORS Bypass Extension
+class CORSBypassExtension {
+  constructor() {
+    this.enabled = true;
+    this.customRules = new Map();
+    this.init();
   }
 
-  // Update dynamic rules
-  await updateDynamicRules();
-});
+  init() {
+    // Listen for extension installation
+    chrome.runtime.onInstalled.addListener(() => {
+      this.setupDefaultRules();
+      this.loadSettings();
+    });
 
-// Load saved settings on startup
-chrome.storage.sync.get('corsSettings', (data) => {
-  if (data?.corsSettings) {
-    settings = { ...DEFAULT_SETTINGS, ...data.corsSettings };
+    // Listen for messages from popup/content scripts
+    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+      this.handleMessage(request, sender, sendResponse);
+      return true; // Will respond asynchronously
+    });
+
+    // Listen for tab updates to inject content script
+    chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+      if (changeInfo.status === 'complete' && tab.url) {
+        this.injectContentScript(tabId, tab.url);
+      }
+    });
+
+    // Update badge based on status
+    this.updateBadge();
   }
-});
 
-// Listen for settings changes
-chrome.storage.onChanged.addListener(async (changes, namespace) => {
-  if (namespace === 'sync' && changes.corsSettings) {
-    settings = { ...DEFAULT_SETTINGS, ...changes.corsSettings.newValue };
-    console.log('CORS Bypass settings updated:', settings);
-    await updateDynamicRules();
-  }
-});
+  async setupDefaultRules() {
+    try {
+      // Clear existing rules
+      const existingRules =
+        await chrome.declarativeNetRequest.getDynamicRules();
+      const ruleIdsToRemove = existingRules.map((rule) => rule.id);
 
-// Update dynamic rules based on settings
-async function updateDynamicRules() {
-  try {
-    // Remove existing dynamic rules
-    const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
-    const ruleIds = existingRules.map((rule) => rule.id);
-
-    if (ruleIds.length > 0) {
-      await chrome.declarativeNetRequest.updateDynamicRules({
-        removeRuleIds: ruleIds,
-      });
-    }
-
-    // Add new rules if enabled
-    if (settings.enabled) {
-      const rules = createDynamicRules();
-      if (rules.length > 0) {
+      if (ruleIdsToRemove.length > 0) {
         await chrome.declarativeNetRequest.updateDynamicRules({
-          addRules: rules,
+          removeRuleIds: ruleIdsToRemove,
+        });
+      }
+
+      // Add CORS bypass rules
+      const corsRules = [
+        {
+          id: 1000,
+          priority: 1,
+          action: {
+            type: 'modifyHeaders',
+            responseHeaders: [
+              {
+                header: 'Access-Control-Allow-Origin',
+                operation: 'set',
+                value: '*',
+              },
+              {
+                header: 'Access-Control-Allow-Methods',
+                operation: 'set',
+                value: 'GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD',
+              },
+              {
+                header: 'Access-Control-Allow-Headers',
+                operation: 'set',
+                value: '*',
+              },
+              {
+                header: 'Access-Control-Allow-Credentials',
+                operation: 'set',
+                value: 'true',
+              },
+              {
+                header: 'Access-Control-Expose-Headers',
+                operation: 'set',
+                value: '*',
+              },
+              {
+                header: 'Access-Control-Max-Age',
+                operation: 'set',
+                value: '86400',
+              },
+            ],
+          },
+          condition: {
+            urlFilter: '*',
+            resourceTypes: ['xmlhttprequest', 'main_frame', 'sub_frame'],
+          },
+        },
+        {
+          id: 1001,
+          priority: 2,
+          action: {
+            type: 'modifyHeaders',
+            requestHeaders: [
+              { header: 'Origin', operation: 'remove' },
+              { header: 'Referer', operation: 'remove' },
+            ],
+          },
+          condition: {
+            urlFilter: '*',
+            resourceTypes: ['xmlhttprequest'],
+          },
+        },
+      ];
+
+      await chrome.declarativeNetRequest.updateDynamicRules({
+        addRules: corsRules,
+      });
+
+      console.log('CORS bypass rules added successfully');
+    } catch (error) {
+      console.error('Error setting up CORS rules:', error);
+    }
+  }
+
+  async handleMessage(request, sender, sendResponse) {
+    try {
+      switch (request.action) {
+        case 'getStatus':
+          sendResponse({ enabled: this.enabled });
+          break;
+
+        case 'toggle':
+          this.enabled = !this.enabled;
+          await this.saveSettings();
+          await this.updateRules();
+          this.updateBadge();
+          sendResponse({ enabled: this.enabled });
+          break;
+
+        case 'addCustomRule':
+          await this.addCustomRule(request.rule);
+          sendResponse({ success: true });
+          break;
+
+        case 'removeCustomRule':
+          await this.removeCustomRule(request.ruleId);
+          sendResponse({ success: true });
+          break;
+
+        case 'getCustomRules':
+          sendResponse({ rules: Array.from(this.customRules.values()) });
+          break;
+
+        case 'makeRequest':
+          const result = await this.makeProxyRequest(
+            request.url,
+            request.options
+          );
+          sendResponse(result);
+          break;
+
+        default:
+          sendResponse({ error: 'Unknown action' });
+      }
+    } catch (error) {
+      console.error('Error handling message:', error);
+      sendResponse({ error: error.message });
+    }
+  }
+
+  async makeProxyRequest(url, options = {}) {
+    try {
+      const response = await fetch(url, {
+        method: options.method || 'GET',
+        headers: options.headers || {},
+        body: options.body || null,
+        mode: 'cors',
+        credentials: 'include',
+      });
+
+      const text = await response.text();
+      let data;
+
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = text;
+      }
+
+      return {
+        success: true,
+        data: data,
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries()),
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message,
+        status: 0,
+        statusText: 'Network Error',
+      };
+    }
+  }
+
+  async updateRules() {
+    if (this.enabled) {
+      await this.setupDefaultRules();
+    } else {
+      // Remove all dynamic rules
+      const existingRules =
+        await chrome.declarativeNetRequest.getDynamicRules();
+      const ruleIdsToRemove = existingRules.map((rule) => rule.id);
+
+      if (ruleIdsToRemove.length > 0) {
+        await chrome.declarativeNetRequest.updateDynamicRules({
+          removeRuleIds: ruleIdsToRemove,
         });
       }
     }
-
-    console.log('Dynamic rules updated successfully');
-  } catch (error) {
-    console.error('Error updating dynamic rules:', error);
   }
-}
 
-// Create dynamic rules based on settings
-function createDynamicRules() {
-  const rules = [];
+  async addCustomRule(rule) {
+    const ruleId = Date.now();
+    const customRule = {
+      id: ruleId,
+      priority: rule.priority || 1,
+      action: rule.action,
+      condition: rule.condition,
+    };
 
-  // Base rule for CORS headers
-  const responseHeaders = [];
+    this.customRules.set(ruleId, customRule);
+    await this.saveSettings();
 
-  // Add origin header
-  const originValue = getOriginValue();
-  responseHeaders.push({
-    header: 'Access-Control-Allow-Origin',
-    operation: 'set',
-    value: originValue,
-  });
+    if (this.enabled) {
+      await chrome.declarativeNetRequest.updateDynamicRules({
+        addRules: [customRule],
+      });
+    }
+  }
 
-  // Add methods header
-  responseHeaders.push({
-    header: 'Access-Control-Allow-Methods',
-    operation: 'set',
-    value: settings.allowMethods,
-  });
+  async removeCustomRule(ruleId) {
+    this.customRules.delete(ruleId);
+    await this.saveSettings();
 
-  // Add headers header
-  responseHeaders.push({
-    header: 'Access-Control-Allow-Headers',
-    operation: 'set',
-    value: settings.allowHeaders,
-  });
-
-  // Add credentials header
-  responseHeaders.push({
-    header: 'Access-Control-Allow-Credentials',
-    operation: 'set',
-    value: settings.allowCredentials ? 'true' : 'false',
-  });
-
-  // Add max-age header
-  responseHeaders.push({
-    header: 'Access-Control-Max-Age',
-    operation: 'set',
-    value: '86400',
-  });
-
-  // Add expose headers
-  responseHeaders.push({
-    header: 'Access-Control-Expose-Headers',
-    operation: 'set',
-    value: '*',
-  });
-
-  // Create main rule
-  const mainRule = {
-    id: 1,
-    priority: 1,
-    action: {
-      type: 'modifyHeaders',
-      responseHeaders: responseHeaders,
-    },
-    condition: {
-      resourceTypes: ['main_frame', 'sub_frame', 'xmlhttprequest', 'other'],
-    },
-  };
-
-  // Add domain conditions if not all domains
-  if (
-    settings.domains &&
-    settings.domains.length > 0 &&
-    !settings.domains.includes('*')
-  ) {
-    mainRule.condition.requestDomains = settings.domains.map((domain) => {
-      if (domain.startsWith('*.')) {
-        return domain.substring(2);
-      }
-      return domain;
+    await chrome.declarativeNetRequest.updateDynamicRules({
+      removeRuleIds: [ruleId],
     });
   }
 
-  rules.push(mainRule);
+  async injectContentScript(tabId, url) {
+    try {
+      if (
+        this.enabled &&
+        (url.startsWith('http://') || url.startsWith('https://'))
+      ) {
+        await chrome.scripting.executeScript({
+          target: { tabId: tabId },
+          files: ['inject.js'],
+        });
+      }
+    } catch (error) {
+      // Ignore errors for restricted pages
+    }
+  }
 
-  // Add rule for removing existing headers if requested
-  if (settings.removeExisting) {
-    const removeRule = {
-      id: 2,
-      priority: 2,
-      action: {
-        type: 'modifyHeaders',
-        responseHeaders: [
-          { header: 'Access-Control-Allow-Origin', operation: 'remove' },
-          { header: 'Access-Control-Allow-Methods', operation: 'remove' },
-          { header: 'Access-Control-Allow-Headers', operation: 'remove' },
-          { header: 'Access-Control-Allow-Credentials', operation: 'remove' },
-          { header: 'Access-Control-Expose-Headers', operation: 'remove' },
-          { header: 'Access-Control-Max-Age', operation: 'remove' },
-        ],
-      },
-      condition: {
-        resourceTypes: ['main_frame', 'sub_frame', 'xmlhttprequest', 'other'],
-      },
-    };
+  updateBadge() {
+    const text = this.enabled ? 'ON' : 'OFF';
+    const color = this.enabled ? '#4CAF50' : '#F44336';
 
-    if (
-      settings.domains &&
-      settings.domains.length > 0 &&
-      !settings.domains.includes('*')
-    ) {
-      removeRule.condition.requestDomains = settings.domains.map((domain) => {
-        if (domain.startsWith('*.')) {
-          return domain.substring(2);
-        }
-        return domain;
-      });
+    chrome.action.setBadgeText({ text });
+    chrome.action.setBadgeBackgroundColor({ color });
+  }
+
+  async saveSettings() {
+    await chrome.storage.local.set({
+      enabled: this.enabled,
+      customRules: Array.from(this.customRules.entries()),
+    });
+  }
+
+  async loadSettings() {
+    const data = await chrome.storage.local.get(['enabled', 'customRules']);
+    this.enabled = data.enabled !== undefined ? data.enabled : true;
+
+    if (data.customRules) {
+      this.customRules = new Map(data.customRules);
     }
 
-    rules.push(removeRule);
-  }
-
-  return rules;
-}
-
-// Get origin value based on settings
-function getOriginValue() {
-  switch (settings.allowOrigin) {
-    case 'custom':
-      return settings.customOrigin || '*';
-    case 'request_origin':
-      return '*'; // In declarativeNetRequest, we can't dynamically set to request origin
-    case '*':
-    default:
-      return '*';
+    this.updateBadge();
   }
 }
 
-// Handle extension icon clicks
-chrome.action.onClicked.addListener((tab) => {
-  // This will open the popup
-});
-
-// Content script injection for advanced origin handling
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'toggleCors') {
-    settings.enabled = !settings.enabled;
-    chrome.storage.sync.set({ corsSettings: settings });
-    updateDynamicRules();
-    sendResponse({ enabled: settings.enabled });
-  }
-});
+// Initialize the extension
+const corsExtension = new CORSBypassExtension();

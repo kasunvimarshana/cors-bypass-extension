@@ -1,39 +1,27 @@
 {
-  "name": "CORS Bypass Pro",
-  "version": "2.1.0",
-  "description": "Professional CORS bypass solution for developers with advanced customization options",
   "manifest_version": 3,
-  "permissions": [
-    "storage",
-    "activeTab",
-    "declarativeNetRequest",
-    "declarativeNetRequestWithHostAccess"
-  ],
-  "host_permissions": ["<all_urls>"],
+  "name": "CORS Bypass Extension",
+  "version": "1.0.0",
+  "description": "Bypass CORS restrictions for development purposes",
+  "permissions": ["declarativeNetRequest", "storage", "tabs", "activeTab"],
+  "host_permissions": ["http://*/*", "https://*/*"],
   "background": {
     "service_worker": "background.js"
   },
   "action": {
     "default_popup": "popup.html",
-    "default_icon": {
-      "16": "icons/icon16.png",
-      "32": "icons/icon32.png",
-      "48": "icons/icon48.png",
-      "128": "icons/icon128.png"
+    "default_title": "CORS Bypass"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_start"
     }
-  },
-  "options_ui": {
-    "page": "options.html",
-    "open_in_tab": true
-  },
-  "icons": {
-    "16": "icons/icon16.png",
-    "48": "icons/icon48.png",
-    "128": "icons/icon128.png"
-  },
+  ],
   "web_accessible_resources": [
     {
-      "resources": ["styles.css"],
+      "resources": ["inject.js"],
       "matches": ["<all_urls>"]
     }
   ],
